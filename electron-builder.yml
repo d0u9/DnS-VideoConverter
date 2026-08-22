@@ -13,9 +13,11 @@ mac:
   target:
     - target: dir
   category: public.app-category.video
+  icon: build/icon.icns
 
 win:
   target:
     - target: portable
       arch:
         - x64
+  icon: build/icon.ico

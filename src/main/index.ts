@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron'
 import path from 'node:path'
 import { existsSync, mkdirSync } from 'node:fs'
+import icon from '../../resources/icon.png?asset'
 import { loadSettings, saveSettings, type Settings } from './settings'
 import { autoDetectBinaries, checkBinary } from './binaries'
 import { probeVideo, ProbeError } from './probe'
@@ -53,6 +54,7 @@ function createWindow(): void {
     minHeight: 560,
     show: false,
     autoHideMenuBar: !isMac,
+    ...(isMac ? {} : { icon }),
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -238,6 +240,9 @@ function registerIpc(): void {
 }
 
 app.whenReady().then(() => {
+  // In dev, the app has no bundled .icns yet — brand the Dock icon manually.
+  if (isMac && !app.isPackaged) app.dock?.setIcon(icon)
+
   createMenu()
   registerIpc()
   createWindow()
