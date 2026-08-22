@@ -18,6 +18,8 @@ export interface ConvertOptions {
   crf: number
   /** "original" | "360p" | ... | "4k" | "8k" | "hd" | "fhd" | "qhd" | "uhd" | "WIDTHxHEIGHT" */
   resolution: string
+  /** Re-encode with libx265 even when the source is already HEVC and no resize is needed. */
+  forceReencode?: boolean
 }
 
 export interface FfmpegPlan {
@@ -138,7 +140,7 @@ export function buildFfmpegPlan(probe: ProbeResult, opts: ConvertOptions): Ffmpe
   let videoArgs: string[]
   let willCopyVideo = false
 
-  if (probe.videoCodec === 'hevc' && !needsScale) {
+  if (probe.videoCodec === 'hevc' && !needsScale && !opts.forceReencode) {
     willCopyVideo = true
     videoArgs = ['-c:v', 'copy', '-tag:v', 'hvc1']
   } else {

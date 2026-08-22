@@ -65,6 +65,7 @@ export default function TaskPanel({ taskId, settings, onMeta }: Props): React.JS
   const [crf, setCrf] = useState(() => String(settings.defaultCrf))
   const [resolution, setResolution] = useState(() => settings.defaultResolution)
   const [customRes, setCustomRes] = useState('1920x1080')
+  const [forceReencode, setForceReencode] = useState(false)
   const [outputPath, setOutputPath] = useState('')
 
   const [plan, setPlan] = useState<FfmpegPlan | null>(null)
@@ -176,7 +177,7 @@ export default function TaskPanel({ taskId, settings, onMeta }: Props): React.JS
     }
 
     const resValue = resolution === 'custom' ? customRes.trim() : resolution
-    const opts: ConvertOptions = { crf: Number(crf), resolution: resValue }
+    const opts: ConvertOptions = { crf: Number(crf), resolution: resValue, forceReencode }
 
     let cancelled = false
     window.api.buildPlan(probe, opts).then((res) => {
@@ -192,7 +193,7 @@ export default function TaskPanel({ taskId, settings, onMeta }: Props): React.JS
     return () => {
       cancelled = true
     }
-  }, [probe, crf, resolution, customRes])
+  }, [probe, crf, resolution, customRes, forceReencode])
 
   const handleBrowseInput = async (): Promise<void> => {
     const p = await window.api.selectInputFile()
@@ -214,7 +215,29 @@ export default function TaskPanel({ taskId, settings, onMeta }: Props): React.JS
   }
 
   const handleConvert = async (): Promise<void> => {
-    if (!probe || !plan || !inputPath || !outputPath.trim()) return
+    if (!probe || !inputPath || !outputPath.trim()) return
+
+    // Rebuild the plan from the current CRF/resolution right now, rather than
+    // trusting the `plan` state — that's recomputed asynchronously after each
+    // edit, so a click right after typing could otherwise still see the plan
+    // from before the edit.
+    if (!CRF_RE.test(crf.trim())) {
+      setPlan(null)
+      setPlanError(`Invalid CRF value: ${crf}`)
+      return
+    }
+    const resValue = resolution === 'custom' ? customRes.trim() : resolution
+    const opts: ConvertOptions = { crf: Number(crf), resolution: resValue, forceReencode }
+
+    const planRes = await window.api.buildPlan(probe, opts)
+    if (!planRes.ok) {
+      setPlan(null)
+      setPlanError(planRes.error)
+      return
+    }
+    const freshPlan = planRes.data
+    setPlan(freshPlan)
+    setPlanError(null)
 
     const proceed = await window.api.confirmOverwrite(outputPath.trim())
     if (!proceed) return
@@ -229,7 +252,7 @@ export default function TaskPanel({ taskId, settings, onMeta }: Props): React.JS
       ffmpegPath: settings.ffmpegPath || 'ffmpeg',
       inputPath,
       outputPath: outputPath.trim(),
-      plan,
+      plan: freshPlan,
       durationSec: probe.durationSec
     })
 
@@ -352,6 +375,19 @@ export default function TaskPanel({ taskId, settings, onMeta }: Props): React.JS
                 onChange={(e) => setCustomRes(e.target.value)}
                 placeholder="1920x1080"
               />
+            </div>
+          )}
+
+          {probe?.videoCodec === 'hevc' && (
+            <div className="field checkbox-field">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={forceReencode}
+                  onChange={(e) => setForceReencode(e.target.checked)}
+                />
+                Force re-encode (source is already HEVC — normally stream-copied)
+              </label>
             </div>
           )}
 
