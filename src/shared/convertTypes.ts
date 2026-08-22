@@ -9,6 +9,7 @@ export interface ConvertDoneResult {
   success: boolean
   code: number | null
   error?: string
+  outputSizeBytes?: number
 }
 
 export interface ConvertLogEvent {

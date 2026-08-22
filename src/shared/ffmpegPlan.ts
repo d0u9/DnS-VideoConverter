@@ -11,6 +11,7 @@ export interface ProbeResult {
   audioCodec: string | null
   audioChannels: number | null
   audioBitrate: number | null
+  fileSizeBytes: number
 }
 
 export interface ConvertOptions {

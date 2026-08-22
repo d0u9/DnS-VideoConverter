@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron'
 import path from 'node:path'
-import { existsSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, statSync } from 'node:fs'
 import icon from '../../resources/icon.png?asset'
 import { loadSettings, saveSettings, type Settings } from './settings'
 import { autoDetectBinaries, checkBinary } from './binaries'
@@ -222,7 +222,17 @@ function registerIpc(): void {
       startConversion(taskId, params.ffmpegPath, args, params.durationSec, {
         onLog: (line) => sender.send('convert:log', { taskId, line }),
         onProgress: (progress) => sender.send('convert:progress', { taskId, progress }),
-        onDone: (result) => sender.send('convert:done', { taskId, result })
+        onDone: (result) => {
+          let outputSizeBytes: number | undefined
+          if (result.success) {
+            try {
+              outputSizeBytes = statSync(params.outputPath).size
+            } catch {
+              // non-fatal — just omit the size
+            }
+          }
+          sender.send('convert:done', { taskId, result: { ...result, outputSizeBytes } })
+        }
       })
 
       return { ok: true as const, args }

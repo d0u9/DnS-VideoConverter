@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { ConvertOptions, FfmpegPlan, ProbeResult } from '@shared/ffmpegPlan'
 import type { Settings } from '@shared/settings'
 import type { ConvertDoneResult, ConvertProgress } from '@shared/convertTypes'
-import { defaultOutputPath, formatBitrate, formatDuration } from './format'
+import { defaultOutputPath, formatBitrate, formatBytes, formatDuration } from './format'
 
 interface CommandRow {
   flag: string | null
@@ -15,6 +15,17 @@ function pairArgs(args: string[]): CommandRow[] {
     rows.push({ flag: args[i], value: args[i + 1] ?? '' })
   }
   return rows
+}
+
+function sizeChangeText(beforeBytes: number | undefined, afterBytes: number | undefined): string {
+  const before = formatBytes(beforeBytes)
+  const after = formatBytes(afterBytes)
+  if (!beforeBytes || afterBytes === undefined || beforeBytes <= 0) {
+    return `${before} → ${after}`
+  }
+  const sign = afterBytes <= beforeBytes ? '−' : '+'
+  const pct = Math.abs(Math.round((1 - afterBytes / beforeBytes) * 100))
+  return `${before} → ${after} (${sign}${pct}%)`
 }
 
 const RESOLUTION_OPTIONS = [
@@ -302,6 +313,8 @@ export default function TaskPanel({ taskId, settings, onMeta }: Props): React.JS
                     )}`
                   : 'none'}
               </dd>
+              <dt>File size</dt>
+              <dd>{formatBytes(probe.fileSizeBytes)}</dd>
             </dl>
           </section>
         )}
@@ -393,6 +406,22 @@ export default function TaskPanel({ taskId, settings, onMeta }: Props): React.JS
           </section>
         )}
 
+        {!converting && doneResult && (
+          <div className={`result-banner ${doneResult.success ? 'success' : 'failure'}`}>
+            <span className="result-icon">{doneResult.success ? '✓' : '✗'}</span>
+            <div className="result-text">
+              <div className="result-title">
+                {doneResult.success ? 'Conversion succeeded' : 'Conversion failed'}
+              </div>
+              <div className="result-detail">
+                {doneResult.success
+                  ? sizeChangeText(probe?.fileSizeBytes, doneResult.outputSizeBytes)
+                  : (doneResult.error ?? 'Unknown error')}
+              </div>
+            </div>
+          </div>
+        )}
+
         <section className="convert-bar">
           {!converting ? (
             <button type="button" className="primary" disabled={!canConvert} onClick={handleConvert}>
@@ -420,11 +449,7 @@ export default function TaskPanel({ taskId, settings, onMeta }: Props): React.JS
                   }${progress.fps ? ` · ${progress.fps} fps` : ''}`
                 : converting
                   ? 'Starting…'
-                  : doneResult
-                    ? doneResult.success
-                      ? '✓ Done'
-                      : `✗ ${doneResult.error ?? 'Failed'}`
-                    : ''}
+                  : ''}
             </div>
           </div>
 

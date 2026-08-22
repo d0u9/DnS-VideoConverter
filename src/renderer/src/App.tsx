@@ -80,7 +80,7 @@ export default function App(): React.JSX.Element {
         {tabs.map((tab) => (
           <div
             key={tab.id}
-            className={`tab ${tab.id === activeTabId ? 'active' : ''}`}
+            className={`tab tab-status-${tab.meta.status} ${tab.id === activeTabId ? 'active' : ''}`}
             onClick={() => setActiveTabId(tab.id)}
           >
             {STATUS_ICON[tab.meta.status] && (

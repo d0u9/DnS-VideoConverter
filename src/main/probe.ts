@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { statSync } from 'node:fs'
 import type { ProbeResult } from '../shared/ffmpegPlan'
 
 interface FfprobeStream {
@@ -71,6 +72,13 @@ export function probeVideo(ffprobePath: string, inputPath: string): Promise<Prob
       const audioBitrate =
         audioBitrateRaw && /^\d+$/.test(audioBitrateRaw) ? Number(audioBitrateRaw) : null
 
+      let fileSizeBytes = 0
+      try {
+        fileSizeBytes = statSync(inputPath).size
+      } catch {
+        // leave at 0 — non-fatal, the file was already readable by ffprobe above
+      }
+
       resolve({
         videoCodec: videoStream.codec_name ?? '',
         pixFmt: videoStream.pix_fmt ?? '',
@@ -80,7 +88,8 @@ export function probeVideo(ffprobePath: string, inputPath: string): Promise<Prob
         hasAudio: Boolean(audioStream),
         audioCodec: audioStream?.codec_name ?? null,
         audioChannels: typeof audioStream?.channels === 'number' ? audioStream.channels : null,
-        audioBitrate
+        audioBitrate,
+        fileSizeBytes
       })
     })
   })
