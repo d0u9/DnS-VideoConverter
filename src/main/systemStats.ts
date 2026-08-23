@@ -21,15 +21,37 @@ export function startStatsPolling(
 ): () => void {
   let stopped = false
   let timer: NodeJS.Timeout | null = null
+  // Compute rx/tx rate ourselves from cumulative byte counters rather than
+  // trusting systeminformation's own rx_sec/tx_sec — on Windows those come
+  // from WMI counters that have been unreliable (often 0) across adapters,
+  // whereas cumulative rx_bytes/tx_bytes are basic and far more consistently
+  // populated everywhere.
+  let lastSample: { time: number; rxBytes: number; txBytes: number } | null = null
 
   const tick = async (): Promise<void> => {
     try {
       const iface = getIface()
-      const [load, nets] = await Promise.all([si.currentLoad(), si.networkStats(iface || '*')])
+      const [load, nets0] = await Promise.all([si.currentLoad(), si.networkStats(iface || '*')])
       if (stopped) return
 
-      const netRxBps = nets.reduce((sum, n) => sum + (n.rx_sec ?? 0), 0)
-      const netTxBps = nets.reduce((sum, n) => sum + (n.tx_sec ?? 0), 0)
+      // A configured interface that no longer exists (renamed/unplugged)
+      // would otherwise silently report 0/0 forever — fall back to all.
+      const nets = iface && nets0.length === 0 ? await si.networkStats('*') : nets0
+
+      const rxBytes = nets.reduce((sum, n) => sum + (n.rx_bytes ?? 0), 0)
+      const txBytes = nets.reduce((sum, n) => sum + (n.tx_bytes ?? 0), 0)
+      const now = Date.now()
+
+      let netRxBps = 0
+      let netTxBps = 0
+      if (lastSample && rxBytes >= lastSample.rxBytes && txBytes >= lastSample.txBytes) {
+        const dtSec = (now - lastSample.time) / 1000
+        if (dtSec > 0) {
+          netRxBps = (rxBytes - lastSample.rxBytes) / dtSec
+          netTxBps = (txBytes - lastSample.txBytes) / dtSec
+        }
+      }
+      lastSample = { time: now, rxBytes, txBytes }
 
       onStats({ cpuPercent: load.currentLoad, netRxBps, netTxBps })
     } catch {
