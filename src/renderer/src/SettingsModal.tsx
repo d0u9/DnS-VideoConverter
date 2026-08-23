@@ -101,31 +101,10 @@ function NetworkIfaceField({
   onChange: (iface: string) => void
 }): React.JSX.Element {
   const [interfaces, setInterfaces] = useState<NetworkInterfaceInfo[] | null>(null)
-  const [debugText, setDebugText] = useState<string | null>(null)
-  const [debugBusy, setDebugBusy] = useState(false)
-  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle')
 
   useEffect(() => {
     window.api.listNetworkInterfaces().then(setInterfaces)
   }, [])
-
-  const handleRunDiagnostics = async (): Promise<void> => {
-    setDebugBusy(true)
-    setCopyStatus('idle')
-    const text = await window.api.debugNetworkStats()
-    setDebugText(text)
-    setDebugBusy(false)
-  }
-
-  const handleCopy = async (): Promise<void> => {
-    if (!debugText) return
-    try {
-      await navigator.clipboard.writeText(debugText)
-      setCopyStatus('copied')
-    } catch {
-      setCopyStatus('failed')
-    }
-  }
 
   return (
     <div className="field">
@@ -140,29 +119,6 @@ function NetworkIfaceField({
       </select>
       {interfaces === null && <div className="muted">Loading interfaces…</div>}
       {interfaces?.length === 0 && <div className="muted">No interfaces detected.</div>}
-
-      <div className="row" style={{ marginTop: 8 }}>
-        <button type="button" onClick={handleRunDiagnostics} disabled={debugBusy}>
-          {debugBusy ? 'Running…' : 'Run network diagnostics'}
-        </button>
-        {debugText && (
-          <button type="button" onClick={handleCopy}>
-            {copyStatus === 'copied' ? 'Copied!' : copyStatus === 'failed' ? 'Copy failed' : 'Copy to clipboard'}
-          </button>
-        )}
-      </div>
-      {debugText && (
-        <>
-          <div className="muted" style={{ marginTop: 6 }}>
-            If network stats aren&apos;t showing, copy this and send it over so it can be diagnosed.
-          </div>
-          <textarea
-            readOnly
-            value={debugText}
-            style={{ width: '100%', height: 180, marginTop: 6, fontFamily: 'monospace', fontSize: 11 }}
-          />
-        </>
-      )}
     </div>
   )
 }

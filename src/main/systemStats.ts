@@ -48,19 +48,6 @@ async function getWindowsAdapterBytes(): Promise<AdapterBytes[]> {
   }))
 }
 
-export async function debugNetworkStats(): Promise<string> {
-  const [interfaces, statsAll, statsDefault, osInfo, windowsAdapterBytes] = await Promise.all([
-    si.networkInterfaces().catch((e: Error) => ({ error: e.message })),
-    si.networkStats('*').catch((e: Error) => ({ error: e.message })),
-    si.networkStats().catch((e: Error) => ({ error: e.message })),
-    si.osInfo().catch((e: Error) => ({ error: e.message })),
-    process.platform === 'win32'
-      ? getWindowsAdapterBytes().catch((e: Error) => ({ error: e.message }))
-      : Promise.resolve('n/a — not Windows')
-  ])
-  return JSON.stringify({ osInfo, interfaces, statsAll, statsDefault, windowsAdapterBytes }, null, 2)
-}
-
 export function startStatsPolling(
   onStats: (stats: SystemStats) => void,
   getIface: () => string,
