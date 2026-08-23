@@ -78,7 +78,8 @@ export function startConversion(
           percent,
           outTimeSec,
           speed: progressBuf['speed'] ?? null,
-          fps: progressBuf['fps'] ?? null
+          fps: progressBuf['fps'] ?? null,
+          outputSizeBytes: null
         })
 
         progressBuf = {}

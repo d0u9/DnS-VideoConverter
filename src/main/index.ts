@@ -12,7 +12,7 @@ import {
   FfmpegPlanError,
   type ConvertOptions
 } from '../shared/ffmpegPlan'
-import { startStatsPolling } from './systemStats'
+import { startStatsPolling, listNetworkInterfaces } from './systemStats'
 import {
   startRemoteServer,
   stopRemoteServer,
@@ -175,6 +175,10 @@ function registerIpc(): void {
 
   ipcMain.handle('fs:exists', (_e, path: string) => existsSync(path))
 
+  ipcMain.handle('app:getVersion', () => app.getVersion())
+
+  ipcMain.handle('stats:listNetworkInterfaces', () => listNetworkInterfaces())
+
   ipcMain.handle('dialog:confirmOverwrite', async (e, outputPath: string) => {
     if (!existsSync(outputPath)) return true
 
@@ -244,7 +248,16 @@ function registerIpc(): void {
 
       startConversion(taskId, params.ffmpegPath, args, params.durationSec, {
         onLog: (line) => sender.send('convert:log', { taskId, line }),
-        onProgress: (progress) => sender.send('convert:progress', { taskId, progress }),
+        onProgress: (progress) => {
+          let outputSizeBytes: number | null = null
+          try {
+            outputSizeBytes = statSync(params.outputPath).size
+          } catch {
+            // output file not created yet — report 0 rather than omitting it
+            outputSizeBytes = 0
+          }
+          sender.send('convert:progress', { taskId, progress: { ...progress, outputSizeBytes } })
+        },
         onDone: (result) => {
           let outputSizeBytes: number | undefined
           if (result.success) {
@@ -310,12 +323,15 @@ app.whenReady().then(() => {
     }
   })
 
-  startStatsPolling((stats) => {
-    for (const win of BrowserWindow.getAllWindows()) {
-      win.webContents.send('system:stats', stats)
-    }
-    broadcastStats(stats)
-  })
+  startStatsPolling(
+    (stats) => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send('system:stats', stats)
+      }
+      broadcastStats(stats)
+    },
+    () => loadSettings().statsNetIface
+  )
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

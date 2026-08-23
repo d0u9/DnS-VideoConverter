@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { ConvertOptions, FfmpegPlan, ProbeResult } from '@shared/ffmpegPlan'
 import type { Settings } from '@shared/settings'
 import type { ConvertDoneEvent, ConvertLogEvent, ConvertProgressEvent } from '@shared/convertTypes'
-import type { SystemStats } from '@shared/systemStats'
+import type { NetworkInterfaceInfo, SystemStats } from '@shared/systemStats'
 import type { RemoteCommand, RemoteTaskSnapshot } from '@shared/remoteTypes'
 
 const api = {
@@ -21,6 +21,9 @@ const api = {
   confirmOverwrite: (outputPath: string): Promise<boolean> =>
     ipcRenderer.invoke('dialog:confirmOverwrite', outputPath),
   checkFileExists: (path: string): Promise<boolean> => ipcRenderer.invoke('fs:exists', path),
+  getAppVersion: (): Promise<string> => ipcRenderer.invoke('app:getVersion'),
+  listNetworkInterfaces: (): Promise<NetworkInterfaceInfo[]> =>
+    ipcRenderer.invoke('stats:listNetworkInterfaces'),
 
   probe: (
     ffprobePath: string,

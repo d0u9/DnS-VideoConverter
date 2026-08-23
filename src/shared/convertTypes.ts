@@ -3,6 +3,7 @@ export interface ConvertProgress {
   outTimeSec: number | null
   speed: string | null
   fps: string | null
+  outputSizeBytes: number | null
 }
 
 export interface ConvertDoneResult {

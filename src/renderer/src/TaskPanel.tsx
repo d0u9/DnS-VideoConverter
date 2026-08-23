@@ -110,7 +110,7 @@ export default function TaskPanel({
           progress.outTimeSec
         )} / ${formatDuration(probe?.durationSec ?? null)}${
           progress.speed ? ` · ${progress.speed}` : ''
-        }${progress.fps ? ` · ${progress.fps} fps` : ''}`
+        }${progress.fps ? ` · ${progress.fps} fps` : ''} · ${formatBytes(progress.outputSizeBytes ?? 0)}`
       : converting
         ? 'Starting…'
         : null

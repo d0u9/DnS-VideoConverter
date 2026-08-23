@@ -22,6 +22,7 @@ export interface RemoteTaskSnapshot {
 }
 
 export type RemoteServerMessage =
+  | { type: 'hello'; appVersion: string }
   | { type: 'snapshot'; tasks: RemoteTaskSnapshot[] }
   | { type: 'update'; task: RemoteTaskSnapshot }
   | { type: 'remove'; taskId: string }

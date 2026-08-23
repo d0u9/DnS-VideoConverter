@@ -53,6 +53,7 @@ export const REMOTE_PAGE_HTML = `<!doctype html>
   .main-scroll { flex: 1; overflow-y: auto; padding: 0 16px 16px; }
   .top-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
   h1 { font-size: 16px; margin: 0 0 4px; }
+  .app-version { font-size: 11px; font-weight: 400; color: var(--muted); margin-left: 6px; }
   .conn { font-size: 12px; color: var(--muted); }
   .conn.offline { color: var(--danger); }
   .stats { font-size: 11.5px; color: var(--muted); display: flex; gap: 12px; font-variant-numeric: tabular-nums; }
@@ -79,9 +80,12 @@ export const REMOTE_PAGE_HTML = `<!doctype html>
   .task-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
   .task-head.collapsed { margin-bottom: 0; }
   .task-toggle {
-    flex-shrink: 0; border: none; background: none; padding: 0 2px; font-size: 12px;
-    line-height: 1; color: var(--muted); width: 16px;
+    flex-shrink: 0; border: none; background: none; padding: 0; font-size: 15px;
+    line-height: 1; color: var(--muted); width: 28px; height: 28px; margin: -4px 0;
+    display: flex; align-items: center; justify-content: center; border-radius: 6px;
+    cursor: pointer;
   }
+  .task-toggle:hover { background: var(--bg); color: var(--text); }
   .task-title { font-weight: 600; font-size: 15px; word-break: break-all; flex: 1; min-width: 0; }
   .badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; flex-shrink: 0; }
   .badge.converting { background: var(--accent); color: #fff; }
@@ -156,7 +160,7 @@ export const REMOTE_PAGE_HTML = `<!doctype html>
     <div class="main-header">
       <div class="top-row">
         <div>
-          <h1>DnS Video Converter — Remote</h1>
+          <h1>DnS Video Converter — Remote<span class="app-version" id="appVersion"></span></h1>
           <div class="conn" id="conn">Connecting…</div>
         </div>
         <div class="stats" id="stats"></div>
@@ -184,6 +188,7 @@ export const REMOTE_PAGE_HTML = `<!doctype html>
   var tasksEl = document.getElementById('tasks');
   var connEl = document.getElementById('conn');
   var statsEl = document.getElementById('stats');
+  var appVersionEl = document.getElementById('appVersion');
   var confirmBarEl = document.getElementById('confirmBar');
   var filtersEl = document.getElementById('filters');
   var tasks = {};
@@ -506,7 +511,9 @@ export const REMOTE_PAGE_HTML = `<!doctype html>
     ws.onerror = function () { ws.close(); };
     ws.onmessage = function (ev) {
       var msg = JSON.parse(ev.data);
-      if (msg.type === 'snapshot') {
+      if (msg.type === 'hello') {
+        appVersionEl.textContent = 'v' + msg.appVersion;
+      } else if (msg.type === 'snapshot') {
         tasks = {};
         order = [];
         msg.tasks.forEach(function (t) { tasks[t.taskId] = t; order.push(t.taskId); });

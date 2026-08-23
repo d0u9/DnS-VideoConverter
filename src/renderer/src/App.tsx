@@ -32,6 +32,7 @@ export default function App(): React.JSX.Element {
   ])
   const [activeTabId, setActiveTabId] = useState(tabs[0].id)
   const [stats, setStats] = useState<SystemStats | null>(null)
+  const [appVersion, setAppVersion] = useState<string | null>(null)
   // Initial input path per tab, keyed by tab id. Only read once, when a
   // TaskPanel first mounts — kept out of React state so it doesn't need to
   // survive re-renders as a dependency.
@@ -42,6 +43,10 @@ export default function App(): React.JSX.Element {
   }, [])
 
   useEffect(() => window.api.onSystemStats(setStats), [])
+
+  useEffect(() => {
+    window.api.getAppVersion().then(setAppVersion)
+  }, [])
 
   const updateMeta = (id: string, meta: TaskMeta): void => {
     setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, meta } : t)))
@@ -104,7 +109,10 @@ export default function App(): React.JSX.Element {
   return (
     <div className="app">
       <header className="topbar">
-        <h1>DnS Video Converter</h1>
+        <h1>
+          DnS Video Converter
+          {appVersion && <span className="app-version">v{appVersion}</span>}
+        </h1>
         {stats && (
           <div className="system-stats" title="System CPU and network usage">
             <span>CPU {stats.cpuPercent.toFixed(0)}%</span>

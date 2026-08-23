@@ -1,3 +1,4 @@
+import { app } from 'electron'
 import { createServer, type Server } from 'node:http'
 import { networkInterfaces } from 'node:os'
 import { readdirSync } from 'node:fs'
@@ -179,6 +180,7 @@ export function startRemoteServer(port: number): Promise<{ url: string }> {
 
     socketServer.on('connection', (ws) => {
       clients.add(ws)
+      send(ws, { type: 'hello', appVersion: app.getVersion() })
       send(ws, { type: 'snapshot', tasks: Array.from(tasks.values()) })
 
       ws.on('message', (data) => {

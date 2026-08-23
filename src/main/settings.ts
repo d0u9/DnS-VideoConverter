@@ -12,7 +12,8 @@ const DEFAULT_SETTINGS: Settings = {
   defaultCrf: 20,
   defaultResolution: 'original',
   remoteBrowseRoots: [homedir()],
-  remoteServerPort: 47856
+  remoteServerPort: 47856,
+  statsNetIface: ''
 }
 
 function settingsPath(): string {

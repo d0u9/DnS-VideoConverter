@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Settings } from '@shared/settings'
+import type { NetworkInterfaceInfo } from '@shared/systemStats'
 
 interface Props {
   settings: Settings
@@ -92,6 +93,36 @@ function BrowseRootsField({
   )
 }
 
+function NetworkIfaceField({
+  iface,
+  onChange
+}: {
+  iface: string
+  onChange: (iface: string) => void
+}): React.JSX.Element {
+  const [interfaces, setInterfaces] = useState<NetworkInterfaceInfo[] | null>(null)
+
+  useEffect(() => {
+    window.api.listNetworkInterfaces().then(setInterfaces)
+  }, [])
+
+  return (
+    <div className="field">
+      <label>Network interface for CPU/network stats</label>
+      <select value={iface} onChange={(e) => onChange(e.target.value)}>
+        <option value="">All interfaces (sum)</option>
+        {interfaces?.map((n) => (
+          <option key={n.iface} value={n.iface}>
+            {n.iface} {n.ip4 ? `— ${n.ip4}` : ''} {n.operstate === 'up' ? '' : `(${n.operstate})`}
+          </option>
+        ))}
+      </select>
+      {interfaces === null && <div className="muted">Loading interfaces…</div>}
+      {interfaces?.length === 0 && <div className="muted">No interfaces detected.</div>}
+    </div>
+  )
+}
+
 function RemoteServerField({
   port,
   onPortChange
@@ -171,6 +202,7 @@ export default function SettingsModal({ settings, onClose, onSave }: Props): Rea
   const [defaultResolution, setDefaultResolution] = useState(settings.defaultResolution)
   const [remoteBrowseRoots, setRemoteBrowseRoots] = useState(settings.remoteBrowseRoots)
   const [remoteServerPort, setRemoteServerPort] = useState(String(settings.remoteServerPort))
+  const [statsNetIface, setStatsNetIface] = useState(settings.statsNetIface)
 
   const handleSave = (): void => {
     const crfNum = Number(defaultCrf)
@@ -183,7 +215,8 @@ export default function SettingsModal({ settings, onClose, onSave }: Props): Rea
       defaultCrf: Number.isFinite(crfNum) ? crfNum : settings.defaultCrf,
       defaultResolution,
       remoteBrowseRoots,
-      remoteServerPort: validPort ? portNum : settings.remoteServerPort
+      remoteServerPort: validPort ? portNum : settings.remoteServerPort,
+      statsNetIface
     })
   }
 
@@ -240,6 +273,8 @@ export default function SettingsModal({ settings, onClose, onSave }: Props): Rea
         <BrowseRootsField roots={remoteBrowseRoots} onChange={setRemoteBrowseRoots} />
 
         <RemoteServerField port={remoteServerPort} onPortChange={setRemoteServerPort} />
+
+        <NetworkIfaceField iface={statsNetIface} onChange={setStatsNetIface} />
 
         <div className="modal-actions">
           <button type="button" onClick={onClose}>

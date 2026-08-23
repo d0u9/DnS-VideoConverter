@@ -6,4 +6,6 @@ export interface Settings {
   /** Folders the remote web viewer's file browser is allowed to look inside. */
   remoteBrowseRoots: string[]
   remoteServerPort: number
+  /** systeminformation network interface name to report CPU/net stats for; '' means sum all interfaces. */
+  statsNetIface: string
 }

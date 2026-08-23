@@ -1,10 +1,22 @@
 import si from 'systeminformation'
-import type { SystemStats } from '@shared/systemStats'
+import type { NetworkInterfaceInfo, SystemStats } from '@shared/systemStats'
 
-export type { SystemStats }
+export type { SystemStats, NetworkInterfaceInfo }
+
+export async function listNetworkInterfaces(): Promise<NetworkInterfaceInfo[]> {
+  const nets = await si.networkInterfaces()
+  const list = Array.isArray(nets) ? nets : [nets]
+  return list.map((n) => ({
+    iface: n.iface,
+    ip4: n.ip4 ?? '',
+    ip6: n.ip6 ?? '',
+    operstate: n.operstate ?? ''
+  }))
+}
 
 export function startStatsPolling(
   onStats: (stats: SystemStats) => void,
+  getIface: () => string,
   intervalMs = 1500
 ): () => void {
   let stopped = false
@@ -12,7 +24,8 @@ export function startStatsPolling(
 
   const tick = async (): Promise<void> => {
     try {
-      const [load, nets] = await Promise.all([si.currentLoad(), si.networkStats('*')])
+      const iface = getIface()
+      const [load, nets] = await Promise.all([si.currentLoad(), si.networkStats(iface || '*')])
       if (stopped) return
 
       const netRxBps = nets.reduce((sum, n) => sum + (n.rx_sec ?? 0), 0)
