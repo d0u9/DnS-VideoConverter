@@ -33,7 +33,16 @@ export const REMOTE_PAGE_HTML = `<!doctype html>
   .tree-sidebar-head {
     padding: 10px 12px; font-size: 12px; font-weight: 600; text-transform: uppercase;
     letter-spacing: .04em; color: var(--muted); border-bottom: 1px solid var(--border); flex-shrink: 0;
+    display: flex; align-items: center; justify-content: space-between;
   }
+  .tree-refresh {
+    border: none; background: none; padding: 0; width: 22px; height: 22px; font-size: 14px;
+    color: var(--muted); display: flex; align-items: center; justify-content: center; border-radius: 5px;
+    cursor: pointer; text-transform: none; letter-spacing: normal; font-weight: 400;
+  }
+  .tree-refresh:hover { background: var(--bg); color: var(--text); }
+  .tree-refresh.spinning { animation: tree-refresh-spin 0.6s linear; }
+  @keyframes tree-refresh-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
   .tree-container { flex: 1; overflow: auto; padding: 4px 0; }
   .tree-row {
     display: flex; align-items: center; gap: 5px; padding: 5px 8px; cursor: pointer;
@@ -151,7 +160,10 @@ export const REMOTE_PAGE_HTML = `<!doctype html>
 </head>
 <body>
   <aside class="tree-sidebar" id="treeSidebar">
-    <div class="tree-sidebar-head">Files</div>
+    <div class="tree-sidebar-head">
+      <span>Files</span>
+      <button type="button" class="tree-refresh" id="treeRefresh" title="Refresh">⟳</button>
+    </div>
     <div class="tree-container" id="treeContainer"></div>
     <div id="confirmBar"></div>
   </aside>
@@ -288,11 +300,18 @@ export const REMOTE_PAGE_HTML = `<!doctype html>
     if (!active || !tasksEl.contains(active) || !active.hasAttribute || !active.hasAttribute('data-opt')) {
       return null;
     }
+    // A background re-render (e.g. another task's progress ticking) rebuilds
+    // this input from the server's last-known value, which is stale until
+    // blur sends the real edit — so restoring just the caret position isn't
+    // enough, it'd restore the caret into the OLD value and silently drop
+    // whatever the user had typed. Save and restore the live value too.
+    var isTextInput = active.tagName === 'INPUT' && active.type === 'text';
     return {
       taskId: active.getAttribute('data-task'),
       opt: active.getAttribute('data-opt'),
-      selStart: typeof active.selectionStart === 'number' ? active.selectionStart : null,
-      selEnd: typeof active.selectionEnd === 'number' ? active.selectionEnd : null
+      value: isTextInput ? active.value : null,
+      selStart: isTextInput && typeof active.selectionStart === 'number' ? active.selectionStart : null,
+      selEnd: isTextInput && typeof active.selectionEnd === 'number' ? active.selectionEnd : null
     };
   }
 
@@ -300,13 +319,30 @@ export const REMOTE_PAGE_HTML = `<!doctype html>
     if (!saved) return;
     var el = tasksEl.querySelector('[data-task="' + saved.taskId + '"][data-opt="' + saved.opt + '"]');
     if (!el) return;
+    if (saved.value !== null) el.value = saved.value;
     el.focus();
     if (saved.selStart !== null && el.setSelectionRange) {
       try { el.setSelectionRange(saved.selStart, saved.selEnd); } catch (e) { /* not a text input */ }
     }
   }
 
+  // A full re-render replaces every task card's DOM, which can silently
+  // swallow an in-flight click if it happens between mousedown and mouseup
+  // (the click's target node gets replaced mid-gesture). Coalescing bursts
+  // of renders (e.g. from a converting task's frequent progress updates)
+  // into one every ~120ms cuts down how often that window opens, without
+  // making progress updates feel any less live.
+  var renderScheduled = false;
   function renderTasks() {
+    if (renderScheduled) return;
+    renderScheduled = true;
+    setTimeout(function () {
+      renderScheduled = false;
+      doRenderTasks();
+    }, 120);
+  }
+
+  function doRenderTasks() {
     updateFilterCounts();
     if (order.length === 0) {
       tasksEl.innerHTML = '<div class="empty">No tasks yet.</div>';
@@ -554,12 +590,40 @@ export const REMOTE_PAGE_HTML = `<!doctype html>
       });
   }
 
+  function refreshTree() {
+    var expandedPaths = [];
+    for (var p in expanded) { if (expanded[p]) expandedPaths.push(p); }
+    treeCache = {};
+    fetch('/api/browse')
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        rootEntries = data.entries || [];
+        return Promise.all(expandedPaths.map(function (path) {
+          return fetch('/api/browse?path=' + encodeURIComponent(path))
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+              if (d.error) { expanded[path] = false; return; }
+              treeCache[path] = d.entries;
+            });
+        }));
+      })
+      .then(renderTree)
+      .catch(function () {
+        treeContainer.innerHTML = '<div class="tree-empty">Could not load folders.</div>';
+      });
+  }
+
   function renderTree() {
+    // Same class of bug as the task list: a full rebuild on every
+    // expand/collapse/refresh would otherwise reset scroll to the top even
+    // when toggling a folder far down a long tree.
+    var savedScrollTop = treeContainer.scrollTop;
     if (rootEntries.length === 0) {
       treeContainer.innerHTML = '<div class="tree-empty">No folders configured. Add some in Settings on the desktop app.</div>';
       return;
     }
     treeContainer.innerHTML = renderNodes(rootEntries, 0);
+    treeContainer.scrollTop = savedScrollTop;
   }
 
   function renderNodes(entries, depth) {
@@ -619,6 +683,13 @@ export const REMOTE_PAGE_HTML = `<!doctype html>
   });
 
   loadRoots();
+
+  document.getElementById('treeRefresh').addEventListener('click', function (ev) {
+    ev.target.classList.remove('spinning');
+    void ev.target.offsetWidth; // restart the animation on repeated clicks
+    ev.target.classList.add('spinning');
+    refreshTree();
+  });
 
   // --- Resizable sidebar ---
   var sidebar = document.getElementById('treeSidebar');
