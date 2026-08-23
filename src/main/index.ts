@@ -12,7 +12,7 @@ import {
   FfmpegPlanError,
   type ConvertOptions
 } from '../shared/ffmpegPlan'
-import { startStatsPolling, listNetworkInterfaces } from './systemStats'
+import { startStatsPolling, listNetworkInterfaces, debugNetworkStats } from './systemStats'
 import {
   startRemoteServer,
   stopRemoteServer,
@@ -178,6 +178,8 @@ function registerIpc(): void {
   ipcMain.handle('app:getVersion', () => app.getVersion())
 
   ipcMain.handle('stats:listNetworkInterfaces', () => listNetworkInterfaces())
+
+  ipcMain.handle('stats:debugNetworkStats', () => debugNetworkStats())
 
   ipcMain.handle('dialog:confirmOverwrite', async (e, outputPath: string) => {
     if (!existsSync(outputPath)) return true

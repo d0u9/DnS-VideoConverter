@@ -24,6 +24,7 @@ const api = {
   getAppVersion: (): Promise<string> => ipcRenderer.invoke('app:getVersion'),
   listNetworkInterfaces: (): Promise<NetworkInterfaceInfo[]> =>
     ipcRenderer.invoke('stats:listNetworkInterfaces'),
+  debugNetworkStats: (): Promise<string> => ipcRenderer.invoke('stats:debugNetworkStats'),
 
   probe: (
     ffprobePath: string,
