@@ -92,10 +92,17 @@ function BrowseRootsField({
   )
 }
 
-function RemoteServerField(): React.JSX.Element {
+function RemoteServerField({
+  port,
+  onPortChange
+}: {
+  port: string
+  onPortChange: (port: string) => void
+}): React.JSX.Element {
   const [enabled, setEnabled] = useState(false)
   const [url, setUrl] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [portError, setPortError] = useState<string | null>(null)
 
   useEffect(() => {
     window.api.getRemoteServerStatus().then((status) => {
@@ -112,6 +119,18 @@ function RemoteServerField(): React.JSX.Element {
     setBusy(false)
   }
 
+  const handlePortBlur = async (): Promise<void> => {
+    const n = Number(port.trim())
+    if (!Number.isInteger(n) || n < 1 || n > 65535) {
+      setPortError('Enter a port number between 1 and 65535.')
+      return
+    }
+    setPortError(null)
+    await window.api.setSettings({ remoteServerPort: n })
+    // Restart on the new port immediately if the server is already running.
+    if (enabled) await handleToggle(true)
+  }
+
   return (
     <div className="field checkbox-field">
       <label>
@@ -123,6 +142,19 @@ function RemoteServerField(): React.JSX.Element {
         />
         Enable remote web viewer (view &amp; control from another device on your network)
       </label>
+      <div className="row" style={{ marginTop: 8 }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          Port
+          <input
+            type="text"
+            value={port}
+            onChange={(e) => onPortChange(e.target.value)}
+            onBlur={handlePortBlur}
+            style={{ maxWidth: 90 }}
+          />
+        </label>
+      </div>
+      {portError && <div className="status status-fail">{portError}</div>}
       {enabled && url && (
         <div className="status status-ok" style={{ marginTop: 6 }}>
           Open {url} on another device. Anyone on your network can reach it — no password.
@@ -138,16 +170,20 @@ export default function SettingsModal({ settings, onClose, onSave }: Props): Rea
   const [defaultCrf, setDefaultCrf] = useState(String(settings.defaultCrf))
   const [defaultResolution, setDefaultResolution] = useState(settings.defaultResolution)
   const [remoteBrowseRoots, setRemoteBrowseRoots] = useState(settings.remoteBrowseRoots)
+  const [remoteServerPort, setRemoteServerPort] = useState(String(settings.remoteServerPort))
 
   const handleSave = (): void => {
     const crfNum = Number(defaultCrf)
+    const portNum = Number(remoteServerPort.trim())
+    const validPort = Number.isInteger(portNum) && portNum >= 1 && portNum <= 65535
     onSave({
       ...settings,
       ffmpegPath: ffmpegPath.trim(),
       ffprobePath: ffprobePath.trim(),
       defaultCrf: Number.isFinite(crfNum) ? crfNum : settings.defaultCrf,
       defaultResolution,
-      remoteBrowseRoots
+      remoteBrowseRoots,
+      remoteServerPort: validPort ? portNum : settings.remoteServerPort
     })
   }
 
@@ -203,7 +239,7 @@ export default function SettingsModal({ settings, onClose, onSave }: Props): Rea
 
         <BrowseRootsField roots={remoteBrowseRoots} onChange={setRemoteBrowseRoots} />
 
-        <RemoteServerField />
+        <RemoteServerField port={remoteServerPort} onPortChange={setRemoteServerPort} />
 
         <div className="modal-actions">
           <button type="button" onClick={onClose}>

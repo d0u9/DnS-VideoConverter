@@ -12,7 +12,7 @@ export function startStatsPolling(
 
   const tick = async (): Promise<void> => {
     try {
-      const [load, nets] = await Promise.all([si.currentLoad(), si.networkStats()])
+      const [load, nets] = await Promise.all([si.currentLoad(), si.networkStats('*')])
       if (stopped) return
 
       const netRxBps = nets.reduce((sum, n) => sum + (n.rx_sec ?? 0), 0)

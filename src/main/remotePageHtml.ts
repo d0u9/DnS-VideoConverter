@@ -48,7 +48,9 @@ export const REMOTE_PAGE_HTML = `<!doctype html>
     flex-shrink: 0; width: 5px; cursor: col-resize; background: transparent;
   }
   .resize-handle:hover, .resize-handle.active { background: var(--accent); }
-  .main-col { flex: 1; min-width: 0; overflow-y: auto; padding: 16px; }
+  .main-col { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+  .main-header { flex-shrink: 0; padding: 16px 16px 0; }
+  .main-scroll { flex: 1; overflow-y: auto; padding: 0 16px 16px; }
   .top-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
   h1 { font-size: 16px; margin: 0 0 4px; }
   .conn { font-size: 12px; color: var(--muted); }
@@ -62,22 +64,31 @@ export const REMOTE_PAGE_HTML = `<!doctype html>
   }
   .filters button.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
   .confirm-bar {
-    display: flex; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--accent);
-    border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; font-size: 13px;
+    display: flex; flex-direction: column; gap: 8px; background: var(--panel); border-top: 2px solid var(--accent);
+    padding: 10px 12px; font-size: 12.5px; position: sticky; bottom: 0; z-index: 5;
+    box-shadow: 0 -4px 10px rgba(0, 0, 0, 0.12);
   }
-  .confirm-bar .msg { flex: 1; min-width: 0; word-break: break-all; }
+  .confirm-bar .msg { word-break: break-all; }
+  .confirm-bar .btn-row { display: flex; gap: 8px; }
+  .confirm-bar .btn-row button { flex: 1; }
   .task {
     background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
     padding: 14px; margin-bottom: 14px; cursor: pointer;
   }
   .task.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
   .task-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .task-head.collapsed { margin-bottom: 0; }
+  .task-toggle {
+    flex-shrink: 0; border: none; background: none; padding: 0 2px; font-size: 12px;
+    line-height: 1; color: var(--muted); width: 16px;
+  }
   .task-title { font-weight: 600; font-size: 15px; word-break: break-all; flex: 1; min-width: 0; }
   .badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; flex-shrink: 0; }
   .badge.converting { background: var(--accent); color: #fff; }
   .badge.done { background: var(--ok-bg); color: var(--ok); }
   .badge.error { background: var(--danger-bg); color: var(--danger); }
   .badge.idle, .badge.ready, .badge.probing { background: var(--border); color: var(--muted); }
+  .badge.force { background: var(--danger-bg); color: var(--danger); font-weight: 600; }
   .task-close {
     flex-shrink: 0; border: none; background: none; padding: 0 2px; font-size: 16px;
     line-height: 1; color: var(--muted);
@@ -105,9 +116,17 @@ export const REMOTE_PAGE_HTML = `<!doctype html>
   .opts .checkbox-opt input[type=checkbox] { width: 15px; height: 15px; }
   .progress-track { height: 8px; border-radius: 4px; background: var(--border); overflow: hidden; margin: 8px 0; }
   .progress-fill { height: 100%; background: var(--accent); transition: width 0.2s; }
+  .collapsed-summary { margin-top: 8px; }
+  .collapsed-summary-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 6px; }
+  .meta-inline { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  button.small { padding: 3px 10px; font-size: 12px; flex-shrink: 0; }
   .result { font-size: 12.5px; padding: 8px 10px; border-radius: 6px; margin: 8px 0; }
   .result.success { background: var(--ok-bg); color: var(--ok); }
   .result.failure { background: var(--danger-bg); color: var(--danger); }
+  .overwrite-warn {
+    font-size: 12.5px; padding: 8px 10px; border-radius: 6px; margin: 8px 0;
+    background: var(--danger-bg); color: var(--danger);
+  }
   .actions { display: flex; gap: 8px; margin-top: 8px; }
   button {
     padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border);
@@ -130,24 +149,28 @@ export const REMOTE_PAGE_HTML = `<!doctype html>
   <aside class="tree-sidebar" id="treeSidebar">
     <div class="tree-sidebar-head">Files</div>
     <div class="tree-container" id="treeContainer"></div>
+    <div id="confirmBar"></div>
   </aside>
   <div class="resize-handle" id="resizeHandle"></div>
   <main class="main-col">
-    <div class="top-row">
-      <div>
-        <h1>DnS Video Converter — Remote</h1>
-        <div class="conn" id="conn">Connecting…</div>
+    <div class="main-header">
+      <div class="top-row">
+        <div>
+          <h1>DnS Video Converter — Remote</h1>
+          <div class="conn" id="conn">Connecting…</div>
+        </div>
+        <div class="stats" id="stats"></div>
       </div>
-      <div class="stats" id="stats"></div>
+      <div class="hint">Click a task to select it, then click a file on the left — you'll be asked to confirm before it's loaded in.</div>
+      <div class="filters" id="filters">
+        <button data-filter="all" class="active">All</button>
+        <button data-filter="processing">Processing</button>
+        <button data-filter="finished">Finished</button>
+      </div>
     </div>
-    <div class="hint">Click a task to select it, then click a file on the left — you'll be asked to confirm before it's loaded in.</div>
-    <div id="confirmBar"></div>
-    <div class="filters" id="filters">
-      <button data-filter="all" class="active">All</button>
-      <button data-filter="processing">Processing</button>
-      <button data-filter="finished">Finished</button>
+    <div class="main-scroll">
+      <div id="tasks"><div class="empty">No tasks yet.</div></div>
     </div>
-    <div id="tasks"><div class="empty">No tasks yet.</div></div>
   </main>
 
 <script>
@@ -165,6 +188,8 @@ export const REMOTE_PAGE_HTML = `<!doctype html>
   var filtersEl = document.getElementById('filters');
   var tasks = {};
   var order = [];
+  var collapsed = {}; // taskId -> bool, explicit user override
+  var logOpen = {}; // taskId -> bool, whether the log <details> is expanded
   var selectedTaskId = null;
   var pendingFile = null; // { path, taskId | null }
   var currentFilter = 'all';
@@ -220,8 +245,8 @@ export const REMOTE_PAGE_HTML = `<!doctype html>
     confirmBarEl.innerHTML =
       '<div class="confirm-bar">' +
         '<div class="msg">Load <strong>' + escapeHtml(fileName) + '</strong> into ' + targetLabel + '?</div>' +
-        '<button id="confirmYes" class="primary">Load</button>' +
-        '<button id="confirmNo">Cancel</button>' +
+        '<div class="btn-row"><button id="confirmYes" class="primary">Load</button>' +
+        '<button id="confirmNo">Cancel</button></div>' +
       '</div>';
     document.getElementById('confirmYes').addEventListener('click', function () {
       var msg = { type: 'newTask', inputPath: pendingFile.path };
@@ -245,6 +270,37 @@ export const REMOTE_PAGE_HTML = `<!doctype html>
     filtersEl.querySelector('[data-filter=finished]').textContent = 'Finished (' + finished + ')';
   }
 
+  // Expanded by default while still being configured (so CRF etc. are
+  // reachable) or while something needs the user's attention; collapsed
+  // once conversion is underway to save space, but with a compact
+  // progress/cancel summary still visible. Always overridable by hand.
+  function defaultExpandedFor(id, t) {
+    return !t.converting && (t.needsOverwriteConfirm || t.status === 'idle' || t.status === 'ready' || t.status === 'probing' || id === selectedTaskId);
+  }
+
+  function captureFocus() {
+    var active = document.activeElement;
+    if (!active || !tasksEl.contains(active) || !active.hasAttribute || !active.hasAttribute('data-opt')) {
+      return null;
+    }
+    return {
+      taskId: active.getAttribute('data-task'),
+      opt: active.getAttribute('data-opt'),
+      selStart: typeof active.selectionStart === 'number' ? active.selectionStart : null,
+      selEnd: typeof active.selectionEnd === 'number' ? active.selectionEnd : null
+    };
+  }
+
+  function restoreFocus(saved) {
+    if (!saved) return;
+    var el = tasksEl.querySelector('[data-task="' + saved.taskId + '"][data-opt="' + saved.opt + '"]');
+    if (!el) return;
+    el.focus();
+    if (saved.selStart !== null && el.setSelectionRange) {
+      try { el.setSelectionRange(saved.selStart, saved.selEnd); } catch (e) { /* not a text input */ }
+    }
+  }
+
   function renderTasks() {
     updateFilterCounts();
     if (order.length === 0) {
@@ -256,6 +312,10 @@ export const REMOTE_PAGE_HTML = `<!doctype html>
       tasksEl.innerHTML = '<div class="empty">No ' + currentFilter + ' tasks.</div>';
       return;
     }
+    // Re-rendering replaces every task card's DOM wholesale, which would
+    // otherwise steal focus/caret out from under someone mid-edit whenever
+    // ANY task's state changes (e.g. another task's progress ticking).
+    var savedFocus = captureFocus();
     tasksEl.innerHTML = visibleIds.map(function (id) {
       var t = tasks[id];
       if (!t) return '';
@@ -270,13 +330,21 @@ export const REMOTE_PAGE_HTML = `<!doctype html>
       var detectedHtml = t.detected ? '<div class="meta">' + escapeHtml(t.detected) + '</div>' : '';
       var outHtml = t.outputPath ? '<div class="meta">→ ' + escapeHtml(t.outputPath) + '</div>' : '';
       var planHtml = t.planSummary ? '<div class="meta">' + escapeHtml(t.planSummary) + '</div>' : '';
+      // Conversion progress re-renders this card frequently; without tracking
+      // open state explicitly, each re-render would recreate the <details>
+      // closed, making it flash open and immediately collapse.
       var logHtml = t.logTail && t.logTail.length
-        ? '<details><summary>Log (' + t.logTail.length + ' lines)</summary><div class="log">' + escapeHtml(t.logTail.join('\\n')) + '</div></details>'
+        ? '<details' + (logOpen[id] ? ' open' : '') + '><summary>Log (' + t.logTail.length + ' lines)</summary><div class="log">' + escapeHtml(t.logTail.join('\\n')) + '</div></details>'
         : '';
       var convertDisabled = !t.canConvert || t.converting;
+      var overwriteHtml = t.needsOverwriteConfirm
+        ? '<div class="overwrite-warn">Output file already exists — converting will overwrite it.</div>'
+        : '';
       var actionsHtml = t.converting
         ? '<div class="actions"><button class="danger" data-cancel="' + id + '">Cancel</button></div>'
-        : '<div class="actions"><button class="primary" ' + (convertDisabled ? 'disabled' : '') + ' data-convert="' + id + '">Convert</button></div>';
+        : t.needsOverwriteConfirm
+          ? '<div class="actions"><button class="danger" data-overwrite="' + id + '">Overwrite &amp; Convert</button></div>'
+          : '<div class="actions"><button class="primary" ' + (convertDisabled ? 'disabled' : '') + ' data-convert="' + id + '">Convert</button></div>';
       var selectedClass = id === selectedTaskId ? ' selected' : '';
 
       var resOptionsHtml = RESOLUTIONS.map(function (r) {
@@ -298,14 +366,38 @@ export const REMOTE_PAGE_HTML = `<!doctype html>
           customResHtml + forceReencodeHtml +
         '</div>';
 
+      var isCollapsed = collapsed.hasOwnProperty(id) ? collapsed[id] : !defaultExpandedFor(id, t);
+      var bodyHtml = isCollapsed
+        ? ''
+        : '<div class="task-body">' +
+            detectedHtml + outHtml + planHtml + optsHtml +
+            progressHtml + resultHtml + overwriteHtml + actionsHtml + logHtml +
+          '</div>';
+      var collapsedSummaryHtml = isCollapsed && t.converting
+        ? '<div class="collapsed-summary">' +
+            '<div class="progress-track"><div class="progress-fill" style="width:' + (t.progressPercent || 0) + '%"></div></div>' +
+            '<div class="collapsed-summary-row">' +
+              '<span class="meta-inline">' + escapeHtml(t.progressText || pct) + '</span>' +
+              '<button type="button" class="danger small" data-cancel="' + id + '">Cancel</button>' +
+            '</div>' +
+          '</div>'
+        : '';
+
+      var forceBadgeHtml = t.isHevc && t.forceReencode
+        ? '<span class="badge force" title="Re-encoding instead of stream-copying the already-HEVC source">Force</span>'
+        : '';
+
       return '<div class="task' + selectedClass + '" data-select="' + id + '">' +
-        '<div class="task-head"><div class="task-title">' + escapeHtml(t.title) + '</div>' +
+        '<div class="task-head">' +
+        '<button type="button" class="task-toggle" data-toggle-card="' + id + '">' + (isCollapsed ? '▸' : '▾') + '</button>' +
+        '<div class="task-title">' + escapeHtml(t.title) + '</div>' +
+        forceBadgeHtml +
         '<span class="badge ' + t.status + '">' + statusLabel(t.status) + '</span>' +
         '<button type="button" class="task-close" data-close="' + id + '" title="Close task">×</button></div>' +
-        detectedHtml + outHtml + planHtml + optsHtml +
-        progressHtml + resultHtml + actionsHtml + logHtml +
+        collapsedSummaryHtml + bodyHtml +
         '</div>';
     }).join('');
+    restoreFocus(savedFocus);
   }
 
   function currentOptsFor(id) {
@@ -330,10 +422,24 @@ export const REMOTE_PAGE_HTML = `<!doctype html>
 
   tasksEl.addEventListener('click', function (ev) {
     var convertBtn = ev.target.closest('[data-convert]');
+    var overwriteBtn = ev.target.closest('[data-overwrite]');
     var cancelBtn = ev.target.closest('[data-cancel]');
     var closeBtn = ev.target.closest('[data-close]');
+    var toggleBtn = ev.target.closest('[data-toggle-card]');
+    if (toggleBtn) {
+      var toggleId = toggleBtn.getAttribute('data-toggle-card');
+      var toggleTask = tasks[toggleId] || {};
+      var wasCollapsed = collapsed.hasOwnProperty(toggleId) ? collapsed[toggleId] : !defaultExpandedFor(toggleId, toggleTask);
+      collapsed[toggleId] = !wasCollapsed;
+      renderTasks();
+      return;
+    }
     if (convertBtn) {
       sendCmd({ type: 'convert', taskId: convertBtn.getAttribute('data-convert') });
+      return;
+    }
+    if (overwriteBtn) {
+      sendCmd({ type: 'convert', taskId: overwriteBtn.getAttribute('data-overwrite'), confirmOverwrite: true });
       return;
     }
     if (cancelBtn) {
@@ -357,6 +463,15 @@ export const REMOTE_PAGE_HTML = `<!doctype html>
       renderTasks();
     }
   });
+
+  // The 'toggle' event doesn't bubble, so listen in the capture phase instead.
+  tasksEl.addEventListener('toggle', function (ev) {
+    var details = ev.target;
+    if (!details || details.tagName !== 'DETAILS') return;
+    var card = details.closest('[data-select]');
+    if (!card) return;
+    logOpen[card.getAttribute('data-select')] = details.open;
+  }, true);
 
   tasksEl.addEventListener('change', function (ev) {
     var el = ev.target.closest('[data-opt]');

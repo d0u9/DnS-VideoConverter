@@ -80,6 +80,7 @@ export default function TaskPanel({
   const [planError, setPlanError] = useState<string | null>(null)
 
   const [converting, setConverting] = useState(false)
+  const [needsOverwriteConfirm, setNeedsOverwriteConfirm] = useState(false)
   const [progress, setProgress] = useState<ConvertProgress | null>(null)
   const [logLines, setLogLines] = useState<string[]>([])
   const [doneResult, setDoneResult] = useState<ConvertDoneResult | null>(null)
@@ -153,7 +154,8 @@ export default function TaskPanel({
       resultSuccess: doneResult ? doneResult.success : null,
       logTail: logLines.slice(-150),
       canConvert,
-      converting
+      converting,
+      needsOverwriteConfirm
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -172,7 +174,8 @@ export default function TaskPanel({
     resolution,
     customRes,
     forceReencode,
-    logLines
+    logLines,
+    needsOverwriteConfirm
   ])
 
   // Remove this task from the remote viewer when its tab is closed.
@@ -223,6 +226,7 @@ export default function TaskPanel({
     setDoneResult(null)
     setLogLines([])
     setProgress(null)
+    setNeedsOverwriteConfirm(false)
 
     const ffprobePath = settings.ffprobePath || 'ffprobe'
 
@@ -293,10 +297,15 @@ export default function TaskPanel({
 
   const handleBrowseOutput = async (): Promise<void> => {
     const p = await window.api.selectOutputFile(outputPath)
-    if (p) setOutputPath(p)
+    if (p) {
+      setOutputPath(p)
+      setNeedsOverwriteConfirm(false)
+    }
   }
 
-  const handleConvert = async (): Promise<void> => {
+  const handleConvert = async (
+    remoteOpts?: { remote?: boolean; confirmOverwrite?: boolean }
+  ): Promise<void> => {
     if (!probe || !inputPath || !outputPath.trim()) return
 
     // Rebuild the plan from the current CRF/resolution right now, rather than
@@ -321,8 +330,24 @@ export default function TaskPanel({
     setPlan(freshPlan)
     setPlanError(null)
 
-    const proceed = await window.api.confirmOverwrite(outputPath.trim())
-    if (!proceed) return
+    const trimmedOutput = outputPath.trim()
+    if (remoteOpts?.remote) {
+      // Remote commands can't drive the native OS confirm dialog — it pops
+      // up on the desktop machine, invisible to whoever is on the web page.
+      // Surface the need-to-confirm in the snapshot instead, and only
+      // proceed once the remote page re-sends the command with confirmOverwrite.
+      if (!remoteOpts.confirmOverwrite) {
+        const exists = await window.api.checkFileExists(trimmedOutput)
+        if (exists) {
+          setNeedsOverwriteConfirm(true)
+          return
+        }
+      }
+      setNeedsOverwriteConfirm(false)
+    } else {
+      const proceed = await window.api.confirmOverwrite(trimmedOutput)
+      if (!proceed) return
+    }
 
     setConverting(true)
     setLogLines([])
@@ -361,7 +386,9 @@ export default function TaskPanel({
 
   useEffect(() => {
     return window.api.onServerCommand((cmd) => {
-      if (cmd.type === 'convert' && cmd.taskId === taskId) handleConvertRef.current()
+      if (cmd.type === 'convert' && cmd.taskId === taskId) {
+        handleConvertRef.current({ remote: true, confirmOverwrite: cmd.confirmOverwrite })
+      }
       else if (cmd.type === 'cancel' && cmd.taskId === taskId) handleCancelRef.current()
       else if (cmd.type === 'newTask' && cmd.taskId === taskId && !inputPathRef.current) {
         setInputPath(cmd.inputPath)
@@ -502,7 +529,14 @@ export default function TaskPanel({
           <div className="field">
             <label>Output file</label>
             <div className="row">
-              <input type="text" value={outputPath} onChange={(e) => setOutputPath(e.target.value)} />
+              <input
+                type="text"
+                value={outputPath}
+                onChange={(e) => {
+                  setOutputPath(e.target.value)
+                  setNeedsOverwriteConfirm(false)
+                }}
+              />
               <button type="button" onClick={handleBrowseOutput}>
                 Browse…
               </button>
@@ -568,7 +602,12 @@ export default function TaskPanel({
 
         <section className="convert-bar">
           {!converting ? (
-            <button type="button" className="primary" disabled={!canConvert} onClick={handleConvert}>
+            <button
+              type="button"
+              className="primary"
+              disabled={!canConvert}
+              onClick={() => handleConvert()}
+            >
               Convert
             </button>
           ) : (

@@ -18,6 +18,7 @@ export interface RemoteTaskSnapshot {
   logTail: string[]
   canConvert: boolean
   converting: boolean
+  needsOverwriteConfirm: boolean
 }
 
 export type RemoteServerMessage =
@@ -27,7 +28,7 @@ export type RemoteServerMessage =
   | { type: 'stats'; cpuPercent: number; netRxBps: number; netTxBps: number }
 
 export type RemoteCommand =
-  | { type: 'convert'; taskId: string }
+  | { type: 'convert'; taskId: string; confirmOverwrite?: boolean }
   | { type: 'cancel'; taskId: string }
   | { type: 'closeTask'; taskId: string }
   /** taskId set + that task is still empty -> fill it in place; otherwise create a new tab. */

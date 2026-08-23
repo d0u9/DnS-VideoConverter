@@ -20,6 +20,7 @@ const api = {
     ipcRenderer.invoke('dialog:selectOutput', defaultPath),
   confirmOverwrite: (outputPath: string): Promise<boolean> =>
     ipcRenderer.invoke('dialog:confirmOverwrite', outputPath),
+  checkFileExists: (path: string): Promise<boolean> => ipcRenderer.invoke('fs:exists', path),
 
   probe: (
     ffprobePath: string,

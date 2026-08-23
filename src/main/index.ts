@@ -26,7 +26,6 @@ import {
 import type { RemoteTaskSnapshot } from '../shared/remoteTypes'
 
 const isMac = process.platform === 'darwin'
-const REMOTE_SERVER_PORT = 47856
 
 function createMenu(): void {
   const template: Electron.MenuItemConstructorOptions[] = [
@@ -174,6 +173,8 @@ function registerIpc(): void {
     return result.filePath
   })
 
+  ipcMain.handle('fs:exists', (_e, path: string) => existsSync(path))
+
   ipcMain.handle('dialog:confirmOverwrite', async (e, outputPath: string) => {
     if (!existsSync(outputPath)) return true
 
@@ -272,7 +273,9 @@ function registerIpc(): void {
 
   ipcMain.handle('server:setEnabled', async (_e, enabled: boolean) => {
     if (enabled) {
-      const { url } = await startRemoteServer(REMOTE_SERVER_PORT)
+      stopRemoteServer()
+      const port = loadSettings().remoteServerPort
+      const { url } = await startRemoteServer(port)
       return { enabled: true, url }
     }
     stopRemoteServer()

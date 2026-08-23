@@ -5,4 +5,5 @@ export interface Settings {
   defaultResolution: string
   /** Folders the remote web viewer's file browser is allowed to look inside. */
   remoteBrowseRoots: string[]
+  remoteServerPort: number
 }

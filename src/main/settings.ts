@@ -11,7 +11,8 @@ const DEFAULT_SETTINGS: Settings = {
   ffprobePath: '',
   defaultCrf: 20,
   defaultResolution: 'original',
-  remoteBrowseRoots: [homedir()]
+  remoteBrowseRoots: [homedir()],
+  remoteServerPort: 47856
 }
 
 function settingsPath(): string {
