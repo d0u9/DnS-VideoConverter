@@ -21,6 +21,10 @@ export function isConverting(taskId: string): boolean {
   return jobs.has(taskId)
 }
 
+export function cancelAllConversions(): void {
+  for (const taskId of jobs.keys()) cancelConversion(taskId)
+}
+
 export function startConversion(
   taskId: string,
   ffmpegPath: string,

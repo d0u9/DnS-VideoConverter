@@ -5,7 +5,7 @@ import icon from '../../resources/icon.png?asset'
 import { loadSettings, saveSettings, type Settings } from './settings'
 import { autoDetectBinaries, checkBinary } from './binaries'
 import { probeVideo, ProbeError } from './probe'
-import { startConversion, cancelConversion, isConverting } from './convert'
+import { startConversion, cancelConversion, isConverting, cancelAllConversions } from './convert'
 import {
   buildFfmpegPlan,
   buildFfmpegCommandArgs,
@@ -245,9 +245,15 @@ function registerIpc(): void {
       const args = buildFfmpegCommandArgs(params.inputPath, params.outputPath, params.plan)
       const sender = e.sender
       const taskId = params.taskId
+      // ffmpeg is a separate OS process that keeps emitting stdout/stderr
+      // events for a moment after the window closes (cancellation isn't
+      // instant) — sending to an already-destroyed WebContents throws.
+      const safeSend = (channel: string, payload: unknown): void => {
+        if (!sender.isDestroyed()) sender.send(channel, payload)
+      }
 
       startConversion(taskId, params.ffmpegPath, args, params.durationSec, {
-        onLog: (line) => sender.send('convert:log', { taskId, line }),
+        onLog: (line) => safeSend('convert:log', { taskId, line }),
         onProgress: (progress) => {
           let outputSizeBytes: number | null = null
           try {
@@ -256,7 +262,7 @@ function registerIpc(): void {
             // output file not created yet — report 0 rather than omitting it
             outputSizeBytes = 0
           }
-          sender.send('convert:progress', { taskId, progress: { ...progress, outputSizeBytes } })
+          safeSend('convert:progress', { taskId, progress: { ...progress, outputSizeBytes } })
         },
         onDone: (result) => {
           let outputSizeBytes: number | undefined
@@ -267,7 +273,7 @@ function registerIpc(): void {
               // non-fatal — just omit the size
             }
           }
-          sender.send('convert:done', { taskId, result: { ...result, outputSizeBytes } })
+          safeSend('convert:done', { taskId, result: { ...result, outputSizeBytes } })
         }
       })
 
@@ -319,14 +325,14 @@ app.whenReady().then(() => {
 
   onRemoteCommand((cmd) => {
     for (const win of BrowserWindow.getAllWindows()) {
-      win.webContents.send('server:command', cmd)
+      if (!win.webContents.isDestroyed()) win.webContents.send('server:command', cmd)
     }
   })
 
   startStatsPolling(
     (stats) => {
       for (const win of BrowserWindow.getAllWindows()) {
-        win.webContents.send('system:stats', stats)
+        if (!win.webContents.isDestroyed()) win.webContents.send('system:stats', stats)
       }
       broadcastStats(stats)
     },
@@ -339,6 +345,9 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
+  // Kill any in-flight ffmpeg processes rather than leaving them running
+  // as orphans after the window (and its progress reporting) is gone.
+  cancelAllConversions()
   stopRemoteServer()
   if (!isMac) app.quit()
 })
