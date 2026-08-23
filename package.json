@@ -1,6 +1,6 @@
 {
   "name": "dns-video-converter",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Standalone GUI for converting video to HEVC/AAC MP4 using ffmpeg",
   "main": "./out/main/index.js",
   "author": "Jane Yuan",
