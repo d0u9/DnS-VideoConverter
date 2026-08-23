@@ -1,3 +1,9 @@
+/*
+ * Color-vision-deficiency-safe palette (Okabe–Ito inspired). Success/failure
+ * are blue-green vs vermillion rather than green vs red — the pairing most
+ * likely to collide for red-green color blindness — and every status is
+ * still backed by an icon/shape, never color alone.
+ */
 :root {
   --bg: #f5f6f8;
   --panel: #ffffff;
@@ -6,13 +12,13 @@
   --muted: #6b7280;
   --accent: #2f6fed;
   --accent-text: #ffffff;
-  --danger: #d64545;
-  --ok: #1a8a4a;
-  --warn: #b6760a;
-  --ok-bg: #e5f5ea;
-  --ok-border: #a9dcbb;
-  --danger-bg: #fbe9e9;
-  --danger-border: #f0b4b4;
+  --danger: #c1440e;
+  --ok: #00805a;
+  --warn: #a3690a;
+  --ok-bg: #e2f5ee;
+  --ok-border: #9bd8c1;
+  --danger-bg: #fbe9e2;
+  --danger-border: #eab494;
   --log-bg: #14181f;
   --log-text: #d7dce2;
 }
@@ -26,13 +32,13 @@
     --muted: #9aa1ab;
     --accent: #5b8bf0;
     --accent-text: #0c1220;
-    --danger: #ea6b6b;
-    --ok: #4fce8a;
-    --warn: #e0ab4a;
-    --ok-bg: #16301f;
-    --ok-border: #2c5c3b;
-    --danger-bg: #3a1a1a;
-    --danger-border: #6b2f2f;
+    --danger: #ff9a52;
+    --ok: #37d6a3;
+    --warn: #f0b429;
+    --ok-bg: #123529;
+    --ok-border: #1f6b4f;
+    --danger-bg: #3a2415;
+    --danger-border: #7a4522;
     --log-bg: #0e1013;
     --log-text: #c6ccd4;
   }
@@ -102,6 +108,7 @@ body {
 }
 
 .tab {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -115,6 +122,15 @@ body {
   max-width: 220px;
   border: 1px solid transparent;
   border-left: 3px solid transparent;
+}
+
+.tab-progress {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--accent);
+  transition: width 0.2s ease;
 }
 
 .tab:hover {

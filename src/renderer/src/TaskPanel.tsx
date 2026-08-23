@@ -48,6 +48,8 @@ export type TaskStatus = 'idle' | 'probing' | 'ready' | 'converting' | 'done' | 
 export interface TaskMeta {
   title: string
   status: TaskStatus
+  /** 0-100 while converting; null otherwise or before ffmpeg reports the first progress line. */
+  progress: number | null
 }
 
 interface Props {
@@ -96,9 +98,9 @@ export default function TaskPanel({ taskId, settings, onMeta }: Props): React.JS
             : probe
               ? 'ready'
               : 'idle'
-    onMeta({ title, status })
+    onMeta({ title, status, progress: converting ? progress?.percent ?? null : null })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inputPath, probeStatus, converting, doneResult, probe])
+  }, [inputPath, probeStatus, converting, doneResult, probe, progress])
 
   // Subscribe to conversion events for this task only.
   useEffect(() => {

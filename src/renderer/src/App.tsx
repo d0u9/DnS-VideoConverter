@@ -25,7 +25,9 @@ export default function App(): React.JSX.Element {
   const [settings, setSettings] = useState<Settings | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
 
-  const [tabs, setTabs] = useState<Tab[]>([{ id: newTaskId(), meta: { title: 'New Task', status: 'idle' } }])
+  const [tabs, setTabs] = useState<Tab[]>([
+    { id: newTaskId(), meta: { title: 'New Task', status: 'idle', progress: null } }
+  ])
   const [activeTabId, setActiveTabId] = useState(tabs[0].id)
 
   useEffect(() => {
@@ -38,7 +40,7 @@ export default function App(): React.JSX.Element {
 
   const handleAddTab = (): void => {
     const id = newTaskId()
-    setTabs((prev) => [...prev, { id, meta: { title: 'New Task', status: 'idle' } }])
+    setTabs((prev) => [...prev, { id, meta: { title: 'New Task', status: 'idle', progress: null } }])
     setActiveTabId(id)
   }
 
@@ -91,6 +93,12 @@ export default function App(): React.JSX.Element {
             <span className="tab-title" title={tab.meta.title}>
               {tab.meta.title}
             </span>
+            {tab.meta.status === 'converting' && (
+              <div
+                className="tab-progress"
+                style={{ width: `${tab.meta.progress ?? 4}%` }}
+              />
+            )}
             {tabs.length > 1 && (
               <button
                 type="button"
