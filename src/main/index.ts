@@ -12,8 +12,21 @@ import {
   FfmpegPlanError,
   type ConvertOptions
 } from '../shared/ffmpegPlan'
+import { startStatsPolling } from './systemStats'
+import {
+  startRemoteServer,
+  stopRemoteServer,
+  isRunning as isRemoteServerRunning,
+  getUrl as remoteServerUrl,
+  updateTaskSnapshot,
+  removeTaskSnapshot,
+  onRemoteCommand,
+  broadcastStats
+} from './remoteServer'
+import type { RemoteTaskSnapshot } from '../shared/remoteTypes'
 
 const isMac = process.platform === 'darwin'
+const REMOTE_SERVER_PORT = 47856
 
 function createMenu(): void {
   const template: Electron.MenuItemConstructorOptions[] = [
@@ -121,6 +134,15 @@ function registerIpc(): void {
       title: `Select ${kind}${isMac ? '' : '.exe'}`,
       properties: ['openFile'],
       filters: isMac ? undefined : [{ name: 'Executable', extensions: ['exe'] }]
+    })
+    if (result.canceled || result.filePaths.length === 0) return null
+    return result.filePaths[0]
+  })
+
+  ipcMain.handle('dialog:selectFolder', async (e) => {
+    const result = await openDialogFor(e, {
+      title: 'Select folder',
+      properties: ['openDirectory']
     })
     if (result.canceled || result.filePaths.length === 0) return null
     return result.filePaths[0]
@@ -247,6 +269,28 @@ function registerIpc(): void {
   ipcMain.handle('shell:showInFolder', (_e, filePath: string) => {
     shell.showItemInFolder(filePath)
   })
+
+  ipcMain.handle('server:setEnabled', async (_e, enabled: boolean) => {
+    if (enabled) {
+      const { url } = await startRemoteServer(REMOTE_SERVER_PORT)
+      return { enabled: true, url }
+    }
+    stopRemoteServer()
+    return { enabled: false, url: null }
+  })
+
+  ipcMain.handle('server:getStatus', () => ({
+    enabled: isRemoteServerRunning(),
+    url: remoteServerUrl()
+  }))
+
+  ipcMain.on('server:pushState', (_e, snapshot: RemoteTaskSnapshot) => {
+    updateTaskSnapshot(snapshot)
+  })
+
+  ipcMain.on('server:removeState', (_e, taskId: string) => {
+    removeTaskSnapshot(taskId)
+  })
 }
 
 app.whenReady().then(() => {
@@ -257,11 +301,25 @@ app.whenReady().then(() => {
   registerIpc()
   createWindow()
 
+  onRemoteCommand((cmd) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send('server:command', cmd)
+    }
+  })
+
+  startStatsPolling((stats) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send('system:stats', stats)
+    }
+    broadcastStats(stats)
+  })
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
 
 app.on('window-all-closed', () => {
+  stopRemoteServer()
   if (!isMac) app.quit()
 })

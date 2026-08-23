@@ -56,10 +56,16 @@ interface Props {
   taskId: string
   settings: Settings
   onMeta: (meta: TaskMeta) => void
+  initialInputPath?: string
 }
 
-export default function TaskPanel({ taskId, settings, onMeta }: Props): React.JSX.Element {
-  const [inputPath, setInputPath] = useState<string | null>(null)
+export default function TaskPanel({
+  taskId,
+  settings,
+  onMeta,
+  initialInputPath
+}: Props): React.JSX.Element {
+  const [inputPath, setInputPath] = useState<string | null>(initialInputPath ?? null)
   const [probe, setProbe] = useState<ProbeResult | null>(null)
   const [probeStatus, setProbeStatus] = useState<'idle' | 'probing' | 'error'>('idle')
   const [probeError, setProbeError] = useState<string | null>(null)
@@ -82,25 +88,99 @@ export default function TaskPanel({ taskId, settings, onMeta }: Props): React.JS
   const [commandOpen, setCommandOpen] = useState(false)
   const logRef = useRef<HTMLDivElement>(null)
 
-  // Report a short status summary up to the tab bar.
+  const title = inputPath ? (inputPath.split(/[/\\]/).pop() ?? inputPath) : 'New Task'
+  const status: TaskStatus = converting
+    ? 'converting'
+    : probeStatus === 'probing'
+      ? 'probing'
+      : probeStatus === 'error'
+        ? 'error'
+        : doneResult
+          ? doneResult.success
+            ? 'done'
+            : 'error'
+          : probe
+            ? 'ready'
+            : 'idle'
+
+  const progressText =
+    converting && progress
+      ? `${progress.percent !== null ? progress.percent.toFixed(1) + '%' : '…'} · ${formatDuration(
+          progress.outTimeSec
+        )} / ${formatDuration(probe?.durationSec ?? null)}${
+          progress.speed ? ` · ${progress.speed}` : ''
+        }${progress.fps ? ` · ${progress.fps} fps` : ''}`
+      : converting
+        ? 'Starting…'
+        : null
+
+  // Report a short status summary up to the tab bar, and mirror full state to
+  // the main process for the remote web viewer.
   useEffect(() => {
-    const title = inputPath ? (inputPath.split(/[/\\]/).pop() ?? inputPath) : 'New Task'
-    const status: TaskStatus = converting
-      ? 'converting'
-      : probeStatus === 'probing'
-        ? 'probing'
-        : probeStatus === 'error'
-          ? 'error'
-          : doneResult
-            ? doneResult.success
-              ? 'done'
-              : 'error'
-            : probe
-              ? 'ready'
-              : 'idle'
-    onMeta({ title, status, progress: converting ? progress?.percent ?? null : null })
+    const progressPercent = converting ? (progress?.percent ?? null) : null
+    onMeta({ title, status, progress: progressPercent })
+
+    window.api.pushTaskState({
+      taskId,
+      title,
+      status,
+      progressPercent,
+      progressText,
+      inputPath,
+      outputPath,
+      crf,
+      resolution,
+      customRes,
+      forceReencode,
+      isHevc: probe?.videoCodec === 'hevc',
+      detected: probe
+        ? `${probe.videoCodec || 'unknown'} · ${probe.pixFmt || 'unknown'} · ${probe.width}×${probe.height} · ${formatDuration(probe.durationSec)} · ${
+            probe.hasAudio
+              ? `${probe.audioCodec ?? 'unknown'} ${probe.audioChannels ?? '?'}ch ${formatBitrate(probe.audioBitrate)}`
+              : 'no audio'
+          } · ${formatBytes(probe.fileSizeBytes)}`
+        : null,
+      planSummary: plan
+        ? `Output ${plan.outputWidth}×${plan.outputHeight} (${plan.needsScale ? 'resized' : 'unchanged'}) · Video: ${
+            plan.willCopyVideo ? 'copy (HEVC)' : 'encode x265'
+          } · Audio: ${plan.willCopyAudio ? 'copy (AAC)' : 'encode AAC'}`
+        : null,
+      resultText: doneResult
+        ? doneResult.success
+          ? `Succeeded — ${sizeChangeText(probe?.fileSizeBytes, doneResult.outputSizeBytes)}`
+          : (doneResult.error ?? 'Failed')
+        : null,
+      resultSuccess: doneResult ? doneResult.success : null,
+      logTail: logLines.slice(-150),
+      canConvert,
+      converting
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inputPath, probeStatus, converting, doneResult, probe, progress])
+  }, [
+    taskId,
+    title,
+    status,
+    converting,
+    progress,
+    progressText,
+    probe,
+    plan,
+    doneResult,
+    inputPath,
+    outputPath,
+    crf,
+    resolution,
+    customRes,
+    forceReencode,
+    logLines
+  ])
+
+  // Remove this task from the remote viewer when its tab is closed.
+  useEffect(() => {
+    return () => {
+      window.api.removeTaskState(taskId)
+    }
+  }, [taskId])
 
   // Subscribe to conversion events for this task only.
   useEffect(() => {
@@ -267,6 +347,32 @@ export default function TaskPanel({ taskId, settings, onMeta }: Props): React.JS
   const handleCancel = async (): Promise<void> => {
     await window.api.cancelConvert(taskId)
   }
+
+  // Let the remote web viewer trigger the same actions as the local buttons.
+  // Refs avoid re-subscribing (and missing events) every render while still
+  // always calling the latest handleConvert/handleCancel closure.
+  const handleConvertRef = useRef(handleConvert)
+  handleConvertRef.current = handleConvert
+  const handleCancelRef = useRef(handleCancel)
+  handleCancelRef.current = handleCancel
+
+  const inputPathRef = useRef(inputPath)
+  inputPathRef.current = inputPath
+
+  useEffect(() => {
+    return window.api.onServerCommand((cmd) => {
+      if (cmd.type === 'convert' && cmd.taskId === taskId) handleConvertRef.current()
+      else if (cmd.type === 'cancel' && cmd.taskId === taskId) handleCancelRef.current()
+      else if (cmd.type === 'newTask' && cmd.taskId === taskId && !inputPathRef.current) {
+        setInputPath(cmd.inputPath)
+      } else if (cmd.type === 'setOptions' && cmd.taskId === taskId) {
+        if (cmd.crf !== undefined) setCrf(cmd.crf)
+        if (cmd.resolution !== undefined) setResolution(cmd.resolution)
+        if (cmd.customRes !== undefined) setCustomRes(cmd.customRes)
+        if (cmd.forceReencode !== undefined) setForceReencode(cmd.forceReencode)
+      }
+    })
+  }, [taskId])
 
   const canConvert = Boolean(
     settings.ffmpegPath && probe && plan && !planError && outputPath.trim() && !converting
@@ -478,17 +584,7 @@ export default function TaskPanel({ taskId, settings, onMeta }: Props): React.JS
                 style={{ width: `${progress?.percent ?? (converting ? 0 : 0)}%` }}
               />
             </div>
-            <div className="progress-text">
-              {converting && progress
-                ? `${progress.percent !== null ? progress.percent.toFixed(1) + '%' : '…'} · ${formatDuration(
-                    progress.outTimeSec
-                  )} / ${formatDuration(probe?.durationSec ?? null)}${
-                    progress.speed ? ` · ${progress.speed}` : ''
-                  }${progress.fps ? ` · ${progress.fps} fps` : ''}`
-                : converting
-                  ? 'Starting…'
-                  : ''}
-            </div>
+            <div className="progress-text">{progressText}</div>
           </div>
 
           {doneResult?.success && (

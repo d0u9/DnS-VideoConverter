@@ -1,5 +1,6 @@
 import { app } from 'electron'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import path from 'node:path'
 import type { Settings } from '@shared/settings'
 
@@ -9,7 +10,8 @@ const DEFAULT_SETTINGS: Settings = {
   ffmpegPath: '',
   ffprobePath: '',
   defaultCrf: 20,
-  defaultResolution: 'original'
+  defaultResolution: 'original',
+  remoteBrowseRoots: [homedir()]
 }
 
 function settingsPath(): string {

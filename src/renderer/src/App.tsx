@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Settings } from '@shared/settings'
+import type { SystemStats } from '@shared/systemStats'
 import SettingsModal from './SettingsModal'
 import TaskPanel, { type TaskMeta } from './TaskPanel'
+import { formatBytes } from './format'
 
 interface Tab {
   id: string
@@ -29,10 +31,17 @@ export default function App(): React.JSX.Element {
     { id: newTaskId(), meta: { title: 'New Task', status: 'idle', progress: null } }
   ])
   const [activeTabId, setActiveTabId] = useState(tabs[0].id)
+  const [stats, setStats] = useState<SystemStats | null>(null)
+  // Initial input path per tab, keyed by tab id. Only read once, when a
+  // TaskPanel first mounts — kept out of React state so it doesn't need to
+  // survive re-renders as a dependency.
+  const initialInputPaths = useRef(new Map<string, string>())
 
   useEffect(() => {
     window.api.getSettings().then(setSettings)
   }, [])
+
+  useEffect(() => window.api.onSystemStats(setStats), [])
 
   const updateMeta = (id: string, meta: TaskMeta): void => {
     setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, meta } : t)))
@@ -52,6 +61,8 @@ export default function App(): React.JSX.Element {
       window.api.cancelConvert(id)
     }
 
+    initialInputPaths.current.delete(id)
+
     const remaining = tabs.filter((t) => t.id !== id)
     if (activeTabId === id) {
       const idx = tabs.findIndex((t) => t.id === id)
@@ -60,6 +71,27 @@ export default function App(): React.JSX.Element {
     }
     setTabs(remaining)
   }
+
+  // Remote clients can act on the tab list too: creating a brand-new tab from
+  // a file they picked via the server-side file browser, or closing one. When
+  // a newTask command targets an existing (still empty) tab instead, TaskPanel's
+  // own per-task listener handles it. A ref keeps this a one-time subscription
+  // while still calling the latest handleCloseTab (which closes over tabs/activeTabId).
+  const handleCloseTabRef = useRef(handleCloseTab)
+  handleCloseTabRef.current = handleCloseTab
+
+  useEffect(() => {
+    return window.api.onServerCommand((cmd) => {
+      if (cmd.type === 'newTask' && !cmd.taskId) {
+        const id = newTaskId()
+        initialInputPaths.current.set(id, cmd.inputPath)
+        setTabs((prev) => [...prev, { id, meta: { title: 'New Task', status: 'idle', progress: null } }])
+        setActiveTabId(id)
+      } else if (cmd.type === 'closeTask') {
+        handleCloseTabRef.current(cmd.taskId)
+      }
+    })
+  }, [])
 
   if (!settings) {
     return (
@@ -73,6 +105,14 @@ export default function App(): React.JSX.Element {
     <div className="app">
       <header className="topbar">
         <h1>DnS Video Converter</h1>
+        {stats && (
+          <div className="system-stats" title="System CPU and network usage">
+            <span>CPU {stats.cpuPercent.toFixed(0)}%</span>
+            <span>
+              ↓{formatBytes(stats.netRxBps)}/s ↑{formatBytes(stats.netTxBps)}/s
+            </span>
+          </div>
+        )}
         <button type="button" className="icon-btn" onClick={() => setSettingsOpen(true)} title="Settings">
           ⚙ Settings
         </button>
@@ -126,6 +166,7 @@ export default function App(): React.JSX.Element {
               taskId={tab.id}
               settings={settings}
               onMeta={(meta) => updateMeta(tab.id, meta)}
+              initialInputPath={initialInputPaths.current.get(tab.id)}
             />
           </div>
         ))}

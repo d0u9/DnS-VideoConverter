@@ -2,6 +2,8 @@ import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { ConvertOptions, FfmpegPlan, ProbeResult } from '@shared/ffmpegPlan'
 import type { Settings } from '@shared/settings'
 import type { ConvertDoneEvent, ConvertLogEvent, ConvertProgressEvent } from '@shared/convertTypes'
+import type { SystemStats } from '@shared/systemStats'
+import type { RemoteCommand, RemoteTaskSnapshot } from '@shared/remoteTypes'
 
 const api = {
   getSettings: (): Promise<Settings> => ipcRenderer.invoke('settings:get'),
@@ -12,6 +14,7 @@ const api = {
   pickBinary: (kind: 'ffmpeg' | 'ffprobe'): Promise<string | null> =>
     ipcRenderer.invoke('binaries:pick', kind),
 
+  selectFolder: (): Promise<string | null> => ipcRenderer.invoke('dialog:selectFolder'),
   selectInputFile: (): Promise<string | null> => ipcRenderer.invoke('dialog:selectInput'),
   selectOutputFile: (defaultPath: string): Promise<string | null> =>
     ipcRenderer.invoke('dialog:selectOutput', defaultPath),
@@ -64,7 +67,33 @@ const api = {
     ipcRenderer.invoke('shell:showInFolder', filePath)
   },
 
-  getPathForFile: (file: File): string => webUtils.getPathForFile(file)
+  getPathForFile: (file: File): string => webUtils.getPathForFile(file),
+
+  onSystemStats: (cb: (stats: SystemStats) => void): (() => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, stats: SystemStats): void => cb(stats)
+    ipcRenderer.on('system:stats', listener)
+    return () => ipcRenderer.removeListener('system:stats', listener)
+  },
+
+  setRemoteServerEnabled: (enabled: boolean): Promise<{ enabled: boolean; url: string | null }> =>
+    ipcRenderer.invoke('server:setEnabled', enabled),
+
+  getRemoteServerStatus: (): Promise<{ enabled: boolean; url: string | null }> =>
+    ipcRenderer.invoke('server:getStatus'),
+
+  pushTaskState: (snapshot: RemoteTaskSnapshot): void => {
+    ipcRenderer.send('server:pushState', snapshot)
+  },
+
+  removeTaskState: (taskId: string): void => {
+    ipcRenderer.send('server:removeState', taskId)
+  },
+
+  onServerCommand: (cb: (cmd: RemoteCommand) => void): (() => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, cmd: RemoteCommand): void => cb(cmd)
+    ipcRenderer.on('server:command', listener)
+    return () => ipcRenderer.removeListener('server:command', listener)
+  }
 }
 
 contextBridge.exposeInMainWorld('api', api)

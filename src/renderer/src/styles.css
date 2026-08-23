@@ -88,6 +88,14 @@ body {
   -webkit-app-region: no-drag;
 }
 
+.system-stats {
+  display: flex;
+  gap: 14px;
+  font-size: 11.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
 .loading-screen {
   flex: 1;
   display: flex;

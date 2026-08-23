@@ -57,11 +57,87 @@ function BinaryField({
   )
 }
 
+function BrowseRootsField({
+  roots,
+  onChange
+}: {
+  roots: string[]
+  onChange: (roots: string[]) => void
+}): React.JSX.Element {
+  const handleAdd = async (): Promise<void> => {
+    const p = await window.api.selectFolder()
+    if (p && !roots.includes(p)) onChange([...roots, p])
+  }
+
+  const handleRemove = (root: string): void => {
+    onChange(roots.filter((r) => r !== root))
+  }
+
+  return (
+    <div className="field">
+      <label>Remote file browser — folders it&apos;s allowed to look inside</label>
+      {roots.length === 0 && <div className="muted" style={{ marginBottom: 6 }}>No folders configured.</div>}
+      {roots.map((root) => (
+        <div className="row" key={root} style={{ marginBottom: 6 }}>
+          <input type="text" value={root} readOnly />
+          <button type="button" onClick={() => handleRemove(root)}>
+            Remove
+          </button>
+        </div>
+      ))}
+      <button type="button" onClick={handleAdd}>
+        Add folder…
+      </button>
+    </div>
+  )
+}
+
+function RemoteServerField(): React.JSX.Element {
+  const [enabled, setEnabled] = useState(false)
+  const [url, setUrl] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    window.api.getRemoteServerStatus().then((status) => {
+      setEnabled(status.enabled)
+      setUrl(status.url)
+    })
+  }, [])
+
+  const handleToggle = async (checked: boolean): Promise<void> => {
+    setBusy(true)
+    const status = await window.api.setRemoteServerEnabled(checked)
+    setEnabled(status.enabled)
+    setUrl(status.url)
+    setBusy(false)
+  }
+
+  return (
+    <div className="field checkbox-field">
+      <label>
+        <input
+          type="checkbox"
+          checked={enabled}
+          disabled={busy}
+          onChange={(e) => handleToggle(e.target.checked)}
+        />
+        Enable remote web viewer (view &amp; control from another device on your network)
+      </label>
+      {enabled && url && (
+        <div className="status status-ok" style={{ marginTop: 6 }}>
+          Open {url} on another device. Anyone on your network can reach it — no password.
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function SettingsModal({ settings, onClose, onSave }: Props): React.JSX.Element {
   const [ffmpegPath, setFfmpegPath] = useState(settings.ffmpegPath)
   const [ffprobePath, setFfprobePath] = useState(settings.ffprobePath)
   const [defaultCrf, setDefaultCrf] = useState(String(settings.defaultCrf))
   const [defaultResolution, setDefaultResolution] = useState(settings.defaultResolution)
+  const [remoteBrowseRoots, setRemoteBrowseRoots] = useState(settings.remoteBrowseRoots)
 
   const handleSave = (): void => {
     const crfNum = Number(defaultCrf)
@@ -70,7 +146,8 @@ export default function SettingsModal({ settings, onClose, onSave }: Props): Rea
       ffmpegPath: ffmpegPath.trim(),
       ffprobePath: ffprobePath.trim(),
       defaultCrf: Number.isFinite(crfNum) ? crfNum : settings.defaultCrf,
-      defaultResolution
+      defaultResolution,
+      remoteBrowseRoots
     })
   }
 
@@ -123,6 +200,10 @@ export default function SettingsModal({ settings, onClose, onSave }: Props): Rea
             <option value="8k">8K (4320p)</option>
           </select>
         </div>
+
+        <BrowseRootsField roots={remoteBrowseRoots} onChange={setRemoteBrowseRoots} />
+
+        <RemoteServerField />
 
         <div className="modal-actions">
           <button type="button" onClick={onClose}>
