@@ -19,6 +19,7 @@
   },
   "include": [
     "src/renderer/src/**/*",
+    "src/renderer/src-remote/**/*",
     "src/shared/**/*",
     "src/preload/index.ts",
     "src/preload/api.d.ts"

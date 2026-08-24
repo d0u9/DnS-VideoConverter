@@ -79,7 +79,9 @@ const api = {
     return () => ipcRenderer.removeListener('system:stats', listener)
   },
 
-  setRemoteServerEnabled: (enabled: boolean): Promise<{ enabled: boolean; url: string | null }> =>
+  setRemoteServerEnabled: (
+    enabled: boolean
+  ): Promise<{ enabled: boolean; url: string | null; error?: string }> =>
     ipcRenderer.invoke('server:setEnabled', enabled),
 
   getRemoteServerStatus: (): Promise<{ enabled: boolean; url: string | null }> =>

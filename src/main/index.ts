@@ -294,8 +294,16 @@ function registerIpc(): void {
     if (enabled) {
       stopRemoteServer()
       const port = loadSettings().remoteServerPort
-      const { url } = await startRemoteServer(port)
-      return { enabled: true, url }
+      try {
+        const { url } = await startRemoteServer(port)
+        return { enabled: true, url }
+      } catch (err) {
+        // Errors like EADDRINUSE are Node SystemErrors, which Electron's IPC
+        // can fail to structured-clone — letting one escape as a rejection
+        // leaves the renderer's invoke() promise hanging forever instead of
+        // rejecting. Convert to a plain string and return normally instead.
+        return { enabled: false, url: null, error: (err as Error).message }
+      }
     }
     stopRemoteServer()
     return { enabled: false, url: null }

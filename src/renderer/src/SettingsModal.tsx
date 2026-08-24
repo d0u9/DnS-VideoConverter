@@ -134,6 +134,7 @@ function RemoteServerField({
   const [url, setUrl] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [portError, setPortError] = useState<string | null>(null)
+  const [serverError, setServerError] = useState<string | null>(null)
 
   useEffect(() => {
     window.api.getRemoteServerStatus().then((status) => {
@@ -144,10 +145,22 @@ function RemoteServerField({
 
   const handleToggle = async (checked: boolean): Promise<void> => {
     setBusy(true)
-    const status = await window.api.setRemoteServerEnabled(checked)
-    setEnabled(status.enabled)
-    setUrl(status.url)
-    setBusy(false)
+    setServerError(null)
+    try {
+      const status = await window.api.setRemoteServerEnabled(checked)
+      setEnabled(status.enabled)
+      setUrl(status.url)
+      // A failed start (e.g. the port is already in use) must not leave the
+      // control stuck disabled — surface the error and let the user retry,
+      // possibly with a different port, without reopening Settings.
+      if (status.error) setServerError(status.error)
+    } catch (err) {
+      setEnabled(false)
+      setUrl(null)
+      setServerError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
   }
 
   const handlePortBlur = async (): Promise<void> => {
@@ -163,17 +176,12 @@ function RemoteServerField({
   }
 
   return (
-    <div className="field checkbox-field">
-      <label>
-        <input
-          type="checkbox"
-          checked={enabled}
-          disabled={busy}
-          onChange={(e) => handleToggle(e.target.checked)}
-        />
-        Enable remote web viewer (view &amp; control from another device on your network)
-      </label>
-      <div className="row" style={{ marginTop: 8 }}>
+    <div className="field">
+      <label>Remote web viewer (view &amp; control from another device on your network)</label>
+      <div className="row" style={{ alignItems: 'center', gap: 10 }}>
+        <button type="button" onClick={() => handleToggle(!enabled)} disabled={busy}>
+          {busy ? (enabled ? 'Stopping…' : 'Starting…') : enabled ? 'Disable' : 'Enable'}
+        </button>
         <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           Port
           <input
@@ -186,6 +194,11 @@ function RemoteServerField({
         </label>
       </div>
       {portError && <div className="status status-fail">{portError}</div>}
+      {serverError && (
+        <div className="status status-fail" style={{ marginTop: 6 }}>
+          Could not start: {serverError}
+        </div>
+      )}
       {enabled && url && (
         <div className="status status-ok" style={{ marginTop: 6 }}>
           Open {url} on another device. Anyone on your network can reach it — no password.

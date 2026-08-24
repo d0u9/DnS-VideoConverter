@@ -1,7 +1,7 @@
 import { app } from 'electron'
-import { createServer, type Server } from 'node:http'
+import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http'
 import { networkInterfaces } from 'node:os'
-import { readdirSync } from 'node:fs'
+import { readdirSync, readFileSync, existsSync } from 'node:fs'
 import path from 'node:path'
 import { WebSocketServer, type WebSocket } from 'ws'
 import type {
@@ -11,8 +11,33 @@ import type {
   RemoteServerMessage,
   RemoteTaskSnapshot
 } from '@shared/remoteTypes'
-import { REMOTE_PAGE_HTML } from './remotePageHtml'
 import { loadSettings } from './settings'
+
+// The remote page is a built React app living alongside the desktop
+// renderer's output (out/renderer/remote.html + out/renderer/assets/*).
+const RENDERER_DIR = path.join(__dirname, '../renderer')
+
+const MIME_TYPES: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.json': 'application/json; charset=utf-8',
+  '.map': 'application/json; charset=utf-8'
+}
+
+function serveStatic(req: IncomingMessage, res: ServerResponse, pathname: string): boolean {
+  if (req.method !== 'GET') return false
+  const relative = pathname === '/' ? 'remote.html' : pathname.replace(/^\/+/, '')
+  const resolved = path.join(RENDERER_DIR, relative)
+  // Never serve anything outside the renderer output directory.
+  if (!resolved.startsWith(RENDERER_DIR) || !existsSync(resolved)) return false
+  const ext = path.extname(resolved)
+  res.writeHead(200, { 'Content-Type': MIME_TYPES[ext] || 'application/octet-stream' })
+  res.end(readFileSync(resolved))
+  return true
+}
 
 const VIDEO_EXTENSIONS = new Set([
   '.mkv',
@@ -148,12 +173,6 @@ export function startRemoteServer(port: number): Promise<{ url: string }> {
     const server = createServer((req, res) => {
       const url = new URL(req.url ?? '/', 'http://localhost')
 
-      if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) {
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
-        res.end(REMOTE_PAGE_HTML)
-        return
-      }
-
       if (req.method === 'GET' && url.pathname === '/api/browse') {
         const target = url.searchParams.get('path')
         const result = target ? browseDirectory(target) : browseRoots()
@@ -166,6 +185,8 @@ export function startRemoteServer(port: number): Promise<{ url: string }> {
         res.end(JSON.stringify(result))
         return
       }
+
+      if (serveStatic(req, res, url.pathname)) return
 
       res.writeHead(404, { 'Content-Type': 'text/plain' })
       res.end('Not found')
