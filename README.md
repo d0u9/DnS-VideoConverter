@@ -12,6 +12,16 @@ at your existing binaries in Settings (⚙ top right). Auto-detection tries
 `ffmpeg`/`ffprobe` on `PATH` and, on macOS, `/opt/homebrew/bin` and
 `/usr/local/bin`.
 
+## Remote web viewer
+
+Settings also has an optional remote web viewer: enable it to control
+conversions from another device on your network (view progress, edit
+CRF/resolution, start/cancel/delete tasks, browse and load video files from a
+configurable set of folders on the machine running the app). It's off by
+default and has no password — anyone on your network can reach it once
+enabled, so only turn it on on trusted networks. The port is configurable in
+Settings.
+
 ## Develop
 
 ```bash
@@ -41,6 +51,9 @@ npm run dist:win
 - `src/shared/ffmpegPlan.ts` — pure logic that turns a probe result + options
   (CRF, resolution) into the exact `ffmpeg` args, matching the bash script.
 - `src/main/` — Electron main process: file dialogs, settings persistence,
-  spawning `ffprobe`/`ffmpeg`, progress parsing.
+  spawning `ffprobe`/`ffmpeg`, progress parsing, and the remote web
+  viewer's HTTP/WebSocket server (`remoteServer.ts`).
 - `src/preload/` — the only bridge exposed to the renderer (`window.api`).
-- `src/renderer/` — the React UI.
+- `src/renderer/src/` — the desktop React UI.
+- `src/renderer/src-remote/` — the remote web viewer's React UI, served by
+  the Electron app's own HTTP server for other devices to open in a browser.
