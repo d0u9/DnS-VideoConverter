@@ -357,6 +357,14 @@ export default function TaskPanel({
     const effectiveResolution = remoteOpts?.resolution ?? resolution
     const effectiveCustomRes = remoteOpts?.customRes ?? customRes
     const effectiveForceReencode = remoteOpts?.forceReencode ?? forceReencode
+    if (remoteOpts?.remote) {
+      // Persist the exact atomic parameter snapshot used for this run so both
+      // desktop and remote Details show the running job's real configuration.
+      setCrf(effectiveCrf)
+      setResolution(effectiveResolution)
+      setCustomRes(effectiveCustomRes)
+      setForceReencode(effectiveForceReencode)
+    }
     if (!CRF_RE.test(effectiveCrf.trim())) {
       setPlan(null)
       setPlanError(`Invalid CRF value: ${effectiveCrf}`)

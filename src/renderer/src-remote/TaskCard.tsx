@@ -54,6 +54,7 @@ function TaskDetailsInner({ task: t, sendCmd, onClose }: {
   }, [t.canConvert, t.converting, t.needsOverwriteConfirm, t.status])
 
   const commit = (options: Omit<Extract<RemoteCommand, { type: 'setOptions' }>, 'type' | 'taskId'>): void => {
+    if (t.converting) return
     sendCmd({ type: 'setOptions', taskId: t.taskId, ...options })
   }
   const progressText = t.progressText || (t.progressPercent != null ? `${t.progressPercent.toFixed(1)}%` : 'Starting…')
@@ -71,11 +72,11 @@ function TaskDetailsInner({ task: t, sendCmd, onClose }: {
           {t.converting ? <button className="danger" onClick={() => sendCmd({ type: 'cancel', taskId: t.taskId })}>Cancel</button> : t.needsOverwriteConfirm ? <button className="danger" disabled={commandPending} onClick={() => startCommand(true)}>{commandPending ? 'Starting…' : 'Overwrite & Convert'}</button> : <button className="primary" disabled={!t.canConvert || commandPending} onClick={() => startCommand()}>{commandPending ? 'Starting…' : isFinished(t) ? 'Convert again' : 'Convert'}</button>}
           <button onClick={() => { if (confirm(`Close "${t.title}"? This cannot be undone.`)) onClose(t.taskId) }}>Remove</button>
         </div>
-        <div className="opts">
-          <label>CRF<input type="text" value={crf} onChange={(e) => setCrf(e.target.value)} onFocus={() => { crfFocused.current = true }} onBlur={() => { crfFocused.current = false; commit({ crf }) }} /></label>
-          <label>Resolution<select value={resolution} onChange={(e) => { setResolution(e.target.value); commit({ resolution: e.target.value }) }}>{RESOLUTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-          {resolution === 'custom' && <label>Custom<input type="text" value={customRes} placeholder="1920x1080" onChange={(e) => setCustomRes(e.target.value)} onFocus={() => { customResFocused.current = true }} onBlur={() => { customResFocused.current = false; commit({ customRes }) }} /></label>}
-          {t.isHevc && <label className="checkbox-opt"><input type="checkbox" checked={forceReencode} onChange={(e) => { setForceReencode(e.target.checked); commit({ forceReencode: e.target.checked }) }} />Force re-encode</label>}
+        <div className={'opts' + (t.converting ? ' locked' : '')}>
+          <label>CRF<input disabled={t.converting} type="text" value={crf} onChange={(e) => setCrf(e.target.value)} onFocus={() => { crfFocused.current = true }} onBlur={() => { crfFocused.current = false; commit({ crf }) }} /></label>
+          <label>Resolution<select disabled={t.converting} value={resolution} onChange={(e) => { setResolution(e.target.value); commit({ resolution: e.target.value }) }}>{RESOLUTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+          {resolution === 'custom' && <label>Custom<input disabled={t.converting} type="text" value={customRes} placeholder="1920x1080" onChange={(e) => setCustomRes(e.target.value)} onFocus={() => { customResFocused.current = true }} onBlur={() => { customResFocused.current = false; commit({ customRes }) }} /></label>}
+          {t.isHevc && <label className="checkbox-opt"><input disabled={t.converting} type="checkbox" checked={forceReencode} onChange={(e) => { setForceReencode(e.target.checked); commit({ forceReencode: e.target.checked }) }} />Force re-encode</label>}
         </div>
         {t.converting && <><div className="progress-track"><div className="progress-fill" style={{ width: `${t.progressPercent || 0}%` }} /></div><div className="meta">{progressText}</div></>}
         {t.needsOverwriteConfirm && <div className="overwrite-warn">Output file already exists — converting will overwrite it.</div>}

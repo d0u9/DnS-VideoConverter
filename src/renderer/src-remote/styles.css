@@ -121,6 +121,8 @@ h1 { font-size: 16px; margin: 0 0 4px; }
   text-transform: none; letter-spacing: normal; color: var(--text); padding-bottom: 6px;
 }
 .opts .checkbox-opt input[type=checkbox] { width: 15px; height: 15px; }
+.opts.locked { opacity: .72; }
+.opts.locked input, .opts.locked select { cursor: not-allowed; }
 .progress-track { height: 8px; border-radius: 4px; background: var(--border); overflow: hidden; margin: 8px 0; }
 .progress-fill { height: 100%; background: var(--accent); transition: width 0.2s; }
 .collapsed-summary { margin-top: 8px; }
