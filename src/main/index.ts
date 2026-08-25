@@ -93,10 +93,16 @@ function registerIpc(): void {
   ipcMain.handle('settings:get', async () => {
     const settings = loadSettings()
 
-    if (!settings.ffmpegPath || !settings.ffprobePath) {
+    // A path saved on another machine (or before a Homebrew migration) may no
+    // longer work. Validate both on startup and repair only invalid entries.
+    const [ffmpegValid, ffprobeValid] = await Promise.all([
+      checkBinary(settings.ffmpegPath),
+      checkBinary(settings.ffprobePath)
+    ])
+    if (!ffmpegValid || !ffprobeValid) {
       const detected = await autoDetectBinaries()
-      settings.ffmpegPath ||= detected.ffmpegPath
-      settings.ffprobePath ||= detected.ffprobePath
+      if (!ffmpegValid) settings.ffmpegPath = detected.ffmpegPath
+      if (!ffprobeValid) settings.ffprobePath = detected.ffprobePath
       saveSettings(settings)
     }
 

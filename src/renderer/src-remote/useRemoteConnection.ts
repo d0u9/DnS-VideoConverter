@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { RemoteCommand, RemoteServerMessage, RemoteTaskSnapshot } from '@shared/remoteTypes'
 import type { SystemStats } from '@shared/systemStats'
 
@@ -90,10 +90,10 @@ export function useRemoteConnection(): RemoteConnection {
     }
   }, [])
 
-  const sendCmd = (cmd: RemoteCommand): void => {
+  const sendCmd = useCallback((cmd: RemoteCommand): void => {
     const ws = wsRef.current
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(cmd))
-  }
+  }, [])
 
   return { state, sendCmd }
 }

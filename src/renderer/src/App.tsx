@@ -4,6 +4,7 @@ import type { SystemStats } from '@shared/systemStats'
 import SettingsModal from './SettingsModal'
 import TaskPanel, { type TaskMeta } from './TaskPanel'
 import { formatBytes } from './format'
+import type { RemoteTaskOptions } from '@shared/remoteTypes'
 
 interface Tab {
   id: string
@@ -37,6 +38,8 @@ export default function App(): React.JSX.Element {
   // TaskPanel first mounts — kept out of React state so it doesn't need to
   // survive re-renders as a dependency.
   const initialInputPaths = useRef(new Map<string, string>())
+  const initialRemoteOptions = useRef(new Map<string, RemoteTaskOptions>())
+  const initialAutoStart = useRef(new Map<string, boolean>())
 
   useEffect(() => {
     window.api.getSettings().then(setSettings)
@@ -49,7 +52,18 @@ export default function App(): React.JSX.Element {
   }, [])
 
   const updateMeta = (id: string, meta: TaskMeta): void => {
-    setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, meta } : t)))
+    setTabs((prev) => {
+      const current = prev.find((t) => t.id === id)?.meta
+      if (
+        current &&
+        current.title === meta.title &&
+        current.status === meta.status &&
+        current.progress === meta.progress
+      ) {
+        return prev
+      }
+      return prev.map((t) => (t.id === id ? { ...t, meta } : t))
+    })
   }
 
   const handleAddTab = (): void => {
@@ -67,6 +81,8 @@ export default function App(): React.JSX.Element {
     }
 
     initialInputPaths.current.delete(id)
+    initialRemoteOptions.current.delete(id)
+    initialAutoStart.current.delete(id)
 
     const remaining = tabs.filter((t) => t.id !== id)
     if (activeTabId === id) {
@@ -90,6 +106,13 @@ export default function App(): React.JSX.Element {
       if (cmd.type === 'newTask' && !cmd.taskId) {
         const id = newTaskId()
         initialInputPaths.current.set(id, cmd.inputPath)
+        initialRemoteOptions.current.set(id, {
+          crf: cmd.crf,
+          resolution: cmd.resolution,
+          customRes: cmd.customRes,
+          forceReencode: cmd.forceReencode
+        })
+        initialAutoStart.current.set(id, cmd.startImmediately === true)
         setTabs((prev) => [...prev, { id, meta: { title: 'New Task', status: 'idle', progress: null } }])
         setActiveTabId(id)
       } else if (cmd.type === 'closeTask') {
@@ -175,6 +198,8 @@ export default function App(): React.JSX.Element {
               settings={settings}
               onMeta={(meta) => updateMeta(tab.id, meta)}
               initialInputPath={initialInputPaths.current.get(tab.id)}
+              initialOptions={initialRemoteOptions.current.get(tab.id)}
+              initialAutoStart={initialAutoStart.current.get(tab.id)}
             />
           </div>
         ))}

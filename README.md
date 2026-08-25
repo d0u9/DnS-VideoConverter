@@ -1,10 +1,10 @@
 # DnS Video Converter
 
 A standalone desktop GUI (Windows + macOS) for converting video to HEVC/AAC MP4
-using your own `ffmpeg`/`ffprobe`. It mirrors the logic of the original
-`get_ffmpeg_args` bash function: probes the source, decides whether video/audio
-can be stream-copied, computes the output resolution (with portrait-aware
-presets), and runs `ffmpeg` while streaming logs and progress live.
+using your own `ffmpeg`/`ffprobe`. It probes the source, decides whether
+video/audio can be stream-copied, computes the output resolution (with
+portrait-aware presets), and runs `ffmpeg` while streaming logs and progress
+live.
 
 No installer — the packaged app is a single portable `.exe` on Windows and a
 plain `.app` bundle on macOS. It does **not** bundle `ffmpeg` itself; point it
@@ -49,7 +49,7 @@ npm run dist:win
 ## Project layout
 
 - `src/shared/ffmpegPlan.ts` — pure logic that turns a probe result + options
-  (CRF, resolution) into the exact `ffmpeg` args, matching the bash script.
+  (CRF, resolution) into the exact `ffmpeg` args to run.
 - `src/main/` — Electron main process: file dialogs, settings persistence,
   spawning `ffprobe`/`ffmpeg`, progress parsing, and the remote web
   viewer's HTTP/WebSocket server (`remoteServer.ts`).

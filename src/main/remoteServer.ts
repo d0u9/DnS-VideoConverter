@@ -32,7 +32,10 @@ function serveStatic(req: IncomingMessage, res: ServerResponse, pathname: string
   const relative = pathname === '/' ? 'remote.html' : pathname.replace(/^\/+/, '')
   const resolved = path.join(RENDERER_DIR, relative)
   // Never serve anything outside the renderer output directory.
-  if (!resolved.startsWith(RENDERER_DIR) || !existsSync(resolved)) return false
+  if (
+    (resolved !== RENDERER_DIR && !resolved.startsWith(RENDERER_DIR + path.sep)) ||
+    !existsSync(resolved)
+  ) return false
   const ext = path.extname(resolved)
   res.writeHead(200, { 'Content-Type': MIME_TYPES[ext] || 'application/octet-stream' })
   res.end(readFileSync(resolved))
@@ -56,6 +59,7 @@ let wss: WebSocketServer | null = null
 let currentUrl: string | null = null
 const clients = new Set<WebSocket>()
 const tasks = new Map<string, RemoteTaskSnapshot>()
+const pendingTaskBroadcasts = new Map<string, ReturnType<typeof setTimeout>>()
 let commandHandler: ((cmd: RemoteCommand) => void) | null = null
 
 export function getUrl(): string | null {
@@ -75,11 +79,34 @@ export function onRemoteCommand(cb: (cmd: RemoteCommand) => void): void {
 }
 
 export function updateTaskSnapshot(snapshot: RemoteTaskSnapshot): void {
+  const previous = tasks.get(snapshot.taskId)
   tasks.set(snapshot.taskId, snapshot)
-  broadcast({ type: 'update', task: snapshot })
+
+  // Progress and ffmpeg log events can produce hundreds of complete snapshots
+  // per second. Keep the latest state for new connections, but coalesce routine
+  // broadcasts. Lifecycle changes remain immediate so controls feel responsive.
+  const lifecycleChanged = !previous || previous.status !== snapshot.status || previous.inputPath !== snapshot.inputPath
+  const pending = pendingTaskBroadcasts.get(snapshot.taskId)
+  if (lifecycleChanged) {
+    if (pending) clearTimeout(pending)
+    pendingTaskBroadcasts.delete(snapshot.taskId)
+    broadcast({ type: 'update', task: snapshot })
+  } else if (!pending) {
+    pendingTaskBroadcasts.set(
+      snapshot.taskId,
+      setTimeout(() => {
+        pendingTaskBroadcasts.delete(snapshot.taskId)
+        const latest = tasks.get(snapshot.taskId)
+        if (latest) broadcast({ type: 'update', task: latest })
+      }, 100)
+    )
+  }
 }
 
 export function removeTaskSnapshot(taskId: string): void {
+  const pending = pendingTaskBroadcasts.get(taskId)
+  if (pending) clearTimeout(pending)
+  pendingTaskBroadcasts.delete(taskId)
   tasks.delete(taskId)
   broadcast({ type: 'remove', taskId })
 }
@@ -248,6 +275,8 @@ export function startRemoteServer(port: number): Promise<{ url: string }> {
 }
 
 export function stopRemoteServer(): void {
+  for (const timer of pendingTaskBroadcasts.values()) clearTimeout(timer)
+  pendingTaskBroadcasts.clear()
   for (const ws of clients) ws.terminate()
   clients.clear()
   wss?.close()

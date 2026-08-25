@@ -21,6 +21,13 @@ export interface RemoteTaskSnapshot {
   needsOverwriteConfirm: boolean
 }
 
+export interface RemoteTaskOptions {
+  crf: string
+  resolution: string
+  customRes: string
+  forceReencode: boolean
+}
+
 export type RemoteServerMessage =
   | { type: 'hello'; appVersion: string }
   | { type: 'snapshot'; tasks: RemoteTaskSnapshot[] }
@@ -29,11 +36,20 @@ export type RemoteServerMessage =
   | { type: 'stats'; cpuPercent: number; netRxBps: number; netTxBps: number }
 
 export type RemoteCommand =
-  | { type: 'convert'; taskId: string; confirmOverwrite?: boolean }
+  | {
+      type: 'convert'
+      taskId: string
+      confirmOverwrite?: boolean
+      /** Current remote editor values, carried atomically with Convert. */
+      crf?: string
+      resolution?: string
+      customRes?: string
+      forceReencode?: boolean
+    }
   | { type: 'cancel'; taskId: string }
   | { type: 'closeTask'; taskId: string }
   /** taskId set + that task is still empty -> fill it in place; otherwise create a new tab. */
-  | { type: 'newTask'; inputPath: string; taskId?: string }
+  | ({ type: 'newTask'; inputPath: string; taskId?: string; startImmediately?: boolean } & RemoteTaskOptions)
   | {
       type: 'setOptions'
       taskId: string

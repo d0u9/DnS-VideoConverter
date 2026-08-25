@@ -3,6 +3,7 @@ import type { ConvertOptions, FfmpegPlan, ProbeResult } from '@shared/ffmpegPlan
 import type { Settings } from '@shared/settings'
 import type { ConvertDoneResult, ConvertProgress } from '@shared/convertTypes'
 import { defaultOutputPath, formatBitrate, formatBytes, formatDuration } from './format'
+import type { RemoteTaskOptions } from '@shared/remoteTypes'
 
 interface CommandRow {
   flag: string | null
@@ -57,29 +58,35 @@ interface Props {
   settings: Settings
   onMeta: (meta: TaskMeta) => void
   initialInputPath?: string
+  initialOptions?: RemoteTaskOptions
+  initialAutoStart?: boolean
 }
 
 export default function TaskPanel({
   taskId,
   settings,
   onMeta,
-  initialInputPath
+  initialInputPath,
+  initialOptions,
+  initialAutoStart
 }: Props): React.JSX.Element {
   const [inputPath, setInputPath] = useState<string | null>(initialInputPath ?? null)
   const [probe, setProbe] = useState<ProbeResult | null>(null)
   const [probeStatus, setProbeStatus] = useState<'idle' | 'probing' | 'error'>('idle')
   const [probeError, setProbeError] = useState<string | null>(null)
 
-  const [crf, setCrf] = useState(() => String(settings.defaultCrf))
-  const [resolution, setResolution] = useState(() => settings.defaultResolution)
-  const [customRes, setCustomRes] = useState('1920x1080')
-  const [forceReencode, setForceReencode] = useState(false)
+  const [crf, setCrf] = useState(() => initialOptions?.crf ?? String(settings.defaultCrf))
+  const [resolution, setResolution] = useState(() => initialOptions?.resolution ?? settings.defaultResolution)
+  const [customRes, setCustomRes] = useState(() => initialOptions?.customRes ?? '1920x1080')
+  const [forceReencode, setForceReencode] = useState(() => initialOptions?.forceReencode ?? false)
   const [outputPath, setOutputPath] = useState('')
 
   const [plan, setPlan] = useState<FfmpegPlan | null>(null)
   const [planError, setPlanError] = useState<string | null>(null)
 
   const [converting, setConverting] = useState(false)
+  const [starting, setStarting] = useState(false)
+  const startingRef = useRef(false)
   const [needsOverwriteConfirm, setNeedsOverwriteConfirm] = useState(false)
   const [progress, setProgress] = useState<ConvertProgress | null>(null)
   const [logLines, setLogLines] = useState<string[]>([])
@@ -88,13 +95,16 @@ export default function TaskPanel({
   const [dragOver, setDragOver] = useState(false)
   const [commandOpen, setCommandOpen] = useState(false)
   const logRef = useRef<HTMLDivElement>(null)
+  const autoStartRef = useRef(initialAutoStart === true)
 
   const title = inputPath ? (inputPath.split(/[/\\]/).pop() ?? inputPath) : 'New Task'
+  const configurationError = probe && !settings.ffmpegPath ? 'ffmpeg is not configured or could not be found.' : null
+  const taskError = probeStatus === 'error' ? probeError : planError || configurationError
   const status: TaskStatus = converting
     ? 'converting'
     : probeStatus === 'probing'
       ? 'probing'
-      : probeStatus === 'error'
+      : taskError
         ? 'error'
         : doneResult
           ? doneResult.success
@@ -146,13 +156,26 @@ export default function TaskPanel({
             plan.willCopyVideo ? 'copy (HEVC)' : 'encode x265'
           } · Audio: ${plan.willCopyAudio ? 'copy (AAC)' : 'encode AAC'}`
         : null,
-      resultText: doneResult
+      resultText: taskError
+        ? probeStatus === 'error'
+          ? `Probe failed — ${taskError}`
+          : `Configuration failed — ${taskError}`
+        : doneResult
         ? doneResult.success
           ? `Succeeded — ${sizeChangeText(probe?.fileSizeBytes, doneResult.outputSizeBytes)}`
           : (doneResult.error ?? 'Failed')
         : null,
-      resultSuccess: doneResult ? doneResult.success : null,
-      logTail: logLines.slice(-150),
+      resultSuccess: taskError ? false : doneResult ? doneResult.success : null,
+      // Live ffmpeg output is intentionally kept on the desktop. The remote
+      // UI only needs diagnostic context after a failed run.
+      logTail:
+        taskError
+          ? [`${probeStatus === 'error' ? 'ffprobe' : 'configuration'} failed: ${taskError}`]
+          : doneResult && !doneResult.success
+            ? logLines.length > 0
+              ? logLines.slice(-150)
+              : [doneResult.error ?? 'ffmpeg failed without producing diagnostic output.']
+            : [],
       canConvert,
       converting,
       needsOverwriteConfirm
@@ -166,7 +189,11 @@ export default function TaskPanel({
     progress,
     progressText,
     probe,
+    probeError,
+    probeStatus,
     plan,
+    planError,
+    configurationError,
     doneResult,
     inputPath,
     outputPath,
@@ -304,21 +331,39 @@ export default function TaskPanel({
   }
 
   const handleConvert = async (
-    remoteOpts?: { remote?: boolean; confirmOverwrite?: boolean }
+    remoteOpts?: {
+      remote?: boolean
+      confirmOverwrite?: boolean
+      crf?: string
+      resolution?: string
+      customRes?: string
+      forceReencode?: boolean
+    }
   ): Promise<void> => {
+    // Lock synchronously, before the first await. Plan building and overwrite
+    // checks leave a window in which a second click/command used to start the
+    // same task again and report a misleading "already running" error.
+    if (startingRef.current || convertingRef.current) return
+    startingRef.current = true
+    setStarting(true)
+    try {
     if (!probe || !inputPath || !outputPath.trim()) return
 
     // Rebuild the plan from the current CRF/resolution right now, rather than
     // trusting the `plan` state — that's recomputed asynchronously after each
     // edit, so a click right after typing could otherwise still see the plan
     // from before the edit.
-    if (!CRF_RE.test(crf.trim())) {
+    const effectiveCrf = remoteOpts?.crf ?? crf
+    const effectiveResolution = remoteOpts?.resolution ?? resolution
+    const effectiveCustomRes = remoteOpts?.customRes ?? customRes
+    const effectiveForceReencode = remoteOpts?.forceReencode ?? forceReencode
+    if (!CRF_RE.test(effectiveCrf.trim())) {
       setPlan(null)
-      setPlanError(`Invalid CRF value: ${crf}`)
+      setPlanError(`Invalid CRF value: ${effectiveCrf}`)
       return
     }
-    const resValue = resolution === 'custom' ? customRes.trim() : resolution
-    const opts: ConvertOptions = { crf: Number(crf), resolution: resValue, forceReencode }
+    const resValue = effectiveResolution === 'custom' ? effectiveCustomRes.trim() : effectiveResolution
+    const opts: ConvertOptions = { crf: Number(effectiveCrf), resolution: resValue, forceReencode: effectiveForceReencode }
 
     const planRes = await window.api.buildPlan(probe, opts)
     if (!planRes.ok) {
@@ -367,6 +412,10 @@ export default function TaskPanel({
       setConverting(false)
       setDoneResult({ success: false, code: null, error: res.error })
     }
+    } finally {
+      startingRef.current = false
+      setStarting(false)
+    }
   }
 
   const handleCancel = async (): Promise<void> => {
@@ -381,16 +430,36 @@ export default function TaskPanel({
   const handleCancelRef = useRef(handleCancel)
   handleCancelRef.current = handleCancel
 
-  const inputPathRef = useRef(inputPath)
-  inputPathRef.current = inputPath
+  const convertingRef = useRef(converting)
+  convertingRef.current = converting
 
   useEffect(() => {
     return window.api.onServerCommand((cmd) => {
       if (cmd.type === 'convert' && cmd.taskId === taskId) {
-        handleConvertRef.current({ remote: true, confirmOverwrite: cmd.confirmOverwrite })
+        handleConvertRef.current({
+          remote: true,
+          confirmOverwrite: cmd.confirmOverwrite,
+          crf: cmd.crf,
+          resolution: cmd.resolution,
+          customRes: cmd.customRes,
+          forceReencode: cmd.forceReencode
+        })
       }
       else if (cmd.type === 'cancel' && cmd.taskId === taskId) handleCancelRef.current()
-      else if (cmd.type === 'newTask' && cmd.taskId === taskId && !inputPathRef.current) {
+      else if (cmd.type === 'newTask' && cmd.taskId === taskId && !convertingRef.current) {
+        // Invalidate the previous file's derived state in the same React batch
+        // as the replacement, so auto-start can never observe an old plan.
+        setProbe(null)
+        setPlan(null)
+        setDoneResult(null)
+        setProgress(null)
+        setLogLines([])
+        setNeedsOverwriteConfirm(false)
+        setCrf(cmd.crf)
+        setResolution(cmd.resolution)
+        setCustomRes(cmd.customRes)
+        setForceReencode(cmd.forceReencode)
+        autoStartRef.current = cmd.startImmediately === true
         setInputPath(cmd.inputPath)
       } else if (cmd.type === 'setOptions' && cmd.taskId === taskId) {
         if (cmd.crf !== undefined) setCrf(cmd.crf)
@@ -404,6 +473,15 @@ export default function TaskPanel({
   const canConvert = Boolean(
     settings.ffmpegPath && probe && plan && !planError && outputPath.trim() && !converting
   )
+
+  // Remote add/replace is a single "configure and run" operation. Wait until
+  // probing and asynchronous plan construction are both complete, then start
+  // exactly once. Existing outputs still use the remote overwrite prompt.
+  useEffect(() => {
+    if (!autoStartRef.current || !canConvert || !probe || !plan || !outputPath.trim()) return
+    autoStartRef.current = false
+    handleConvertRef.current({ remote: true })
+  }, [canConvert, outputPath, plan, probe])
 
   const commandRows: CommandRow[] =
     inputPath && plan
@@ -605,10 +683,10 @@ export default function TaskPanel({
             <button
               type="button"
               className="primary"
-              disabled={!canConvert}
+              disabled={!canConvert || starting}
               onClick={() => handleConvert()}
             >
-              Convert
+              {starting ? 'Starting…' : doneResult ? 'Convert again' : 'Convert'}
             </button>
           ) : (
             <button type="button" className="danger" onClick={handleCancel}>

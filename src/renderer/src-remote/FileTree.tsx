@@ -1,5 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
-import type { BrowseEntry } from '@shared/remoteTypes'
+import { memo, useEffect, useRef, useState } from 'react'
+import type { BrowseEntry, RemoteTaskOptions } from '@shared/remoteTypes'
+
+const RESOLUTIONS = [
+  ['original', 'Original'], ['360p', '360p'], ['480p', '480p'], ['576p', '576p'],
+  ['720p', '720p'], ['1080p', '1080p'], ['1440p', '1440p'], ['4k', '4K (2160p)'],
+  ['8k', '8K (4320p)'], ['custom', 'Custom…']
+] as const
 
 async function browse(path?: string): Promise<{ entries: BrowseEntry[]; error?: string }> {
   const url = path ? `/api/browse?path=${encodeURIComponent(path)}` : '/api/browse'
@@ -62,19 +68,14 @@ function TreeNodes({ entries, depth, expanded, treeCache, onToggle, onFile }: Tr
 
 export interface PendingFile {
   path: string
-  taskId: string | null
 }
 
-export default function FileTree({
-  targetTaskId,
-  targetTaskTitle,
+function FileTree({
   onLoadFile,
   width,
   onWidthChange
 }: {
-  targetTaskId: string | null
-  targetTaskTitle: string | null
-  onLoadFile: (path: string, taskId: string | null) => void
+  onLoadFile: (path: string, options: RemoteTaskOptions) => void
   width: number
   onWidthChange: (w: number) => void
 }): React.JSX.Element {
@@ -83,6 +84,10 @@ export default function FileTree({
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [loadError, setLoadError] = useState(false)
   const [pendingFile, setPendingFile] = useState<PendingFile | null>(null)
+  const [crf, setCrf] = useState('24')
+  const [resolution, setResolution] = useState('original')
+  const [customRes, setCustomRes] = useState('1920x1080')
+  const [forceReencode, setForceReencode] = useState(false)
   const [spinning, setSpinning] = useState(false)
 
   useEffect(() => {
@@ -111,7 +116,7 @@ export default function FileTree({
   }
 
   const handleFile = (path: string): void => {
-    setPendingFile({ path, taskId: targetTaskId })
+    setPendingFile({ path })
   }
 
   const handleRefresh = (): void => {
@@ -141,7 +146,7 @@ export default function FileTree({
 
   const handleConfirmLoad = (): void => {
     if (!pendingFile) return
-    onLoadFile(pendingFile.path, pendingFile.taskId)
+    onLoadFile(pendingFile.path, { crf, resolution, customRes, forceReencode })
     setPendingFile(null)
   }
 
@@ -199,22 +204,28 @@ export default function FileTree({
             />
           )}
         </div>
-        {pendingFile && (
-          <div className="confirm-bar">
-            <div className="msg">
-              Load <strong>{fileName}</strong> into{' '}
-              {targetTaskId ? `"${targetTaskTitle}"` : 'a new task'}?
-            </div>
-            <div className="btn-row">
-              <button className="primary" onClick={handleConfirmLoad}>
-                Load
-              </button>
-              <button onClick={() => setPendingFile(null)}>Cancel</button>
-            </div>
-          </div>
-        )}
       </aside>
       <div className="resize-handle" onMouseDown={handleResizeStart} />
+      {pendingFile && (
+        <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) setPendingFile(null) }}>
+          <div className="add-task-modal" role="dialog" aria-modal="true" aria-labelledby="add-task-title">
+            <div className="modal-head">
+              <h2 id="add-task-title">Add task</h2>
+              <button className="modal-close" onClick={() => setPendingFile(null)} aria-label="Close">×</button>
+            </div>
+            <div className="selected-file"><span>Video</span><strong title={pendingFile.path}>{fileName}</strong><small>{pendingFile.path}</small></div>
+            <div className="modal-fields">
+              <label>CRF<input autoFocus type="text" value={crf} onChange={(e) => setCrf(e.target.value)} /></label>
+              <label>Resolution<select value={resolution} onChange={(e) => setResolution(e.target.value)}>{RESOLUTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+              {resolution === 'custom' && <label>Custom max size<input type="text" value={customRes} onChange={(e) => setCustomRes(e.target.value)} placeholder="1920x1080" /></label>}
+              <label className="modal-checkbox"><input type="checkbox" checked={forceReencode} onChange={(e) => setForceReencode(e.target.checked)} />Force video re-encode</label>
+            </div>
+            <div className="modal-actions"><button onClick={() => setPendingFile(null)}>Cancel</button><button className="primary" disabled={!crf.trim() || (resolution === 'custom' && !customRes.trim())} onClick={handleConfirmLoad}>Add & Convert</button></div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
+
+export default memo(FileTree)

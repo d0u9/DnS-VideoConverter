@@ -53,6 +53,7 @@ export function startConversion(
 
   const job: Job = { child, killTimer: null }
   jobs.set(taskId, job)
+  let finished = false
 
   let stderrTail = ''
   let progressBuf: Record<string, string> = {}
@@ -99,15 +100,22 @@ export function startConversion(
     }
   })
 
-  child.on('error', (err) => {
-    jobs.delete(taskId)
-    handlers.onDone({ success: false, code: null, error: `ffmpeg error: ${err.message}` })
+  const finish = (result: ConvertDoneResult): void => {
+    if (finished) return
+    finished = true
+    // A late event from an old child must never delete a newer job that reused
+    // the same task id.
+    if (jobs.get(taskId) === job) jobs.delete(taskId)
+    if (job.killTimer) clearTimeout(job.killTimer)
+    handlers.onDone(result)
+  }
+
+  child.once('error', (err) => {
+    finish({ success: false, code: null, error: `ffmpeg error: ${err.message}` })
   })
 
-  child.on('exit', (code) => {
-    jobs.delete(taskId)
-    if (job.killTimer) clearTimeout(job.killTimer)
-    handlers.onDone({
+  child.once('close', (code) => {
+    finish({
       success: code === 0,
       code,
       error: code === 0 ? undefined : stderrTail.trim() || `ffmpeg exited with code ${code}`
