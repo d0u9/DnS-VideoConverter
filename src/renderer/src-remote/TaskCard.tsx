@@ -35,7 +35,7 @@ function TaskCard({ task: t, isSelected, onSelect }: {
   task: RemoteTaskSnapshot
   isSelected: boolean
   onSelect: (taskId: string) => void
-  sendCmd: (cmd: RemoteCommand) => void
+  sendCmd: (cmd: RemoteCommand) => boolean
 }): React.JSX.Element {
   const pct = t.progressPercent == null ? '' : `${t.progressPercent.toFixed(1)}%`
   return (
@@ -50,7 +50,7 @@ function TaskCard({ task: t, isSelected, onSelect }: {
 
 function TaskDetailsInner({ task: t, sendCmd, onClose }: {
   task: RemoteTaskSnapshot
-  sendCmd: (cmd: RemoteCommand) => void
+  sendCmd: (cmd: RemoteCommand) => boolean
   onClose: (taskId: string) => void
 }): React.JSX.Element {
   const [crf, setCrf] = useState(t.crf)
@@ -58,6 +58,7 @@ function TaskDetailsInner({ task: t, sendCmd, onClose }: {
   const [resolution, setResolution] = useState(t.resolution)
   const [forceReencode, setForceReencode] = useState(t.forceReencode)
   const [commandPending, setCommandPending] = useState(false)
+  const [cancelPending, setCancelPending] = useState(false)
   const crfFocused = useRef(false)
   const customResFocused = useRef(false)
 
@@ -68,6 +69,19 @@ function TaskDetailsInner({ task: t, sendCmd, onClose }: {
   useEffect(() => {
     if (t.converting || t.needsOverwriteConfirm || t.status === 'error' || !t.canConvert) setCommandPending(false)
   }, [t.canConvert, t.converting, t.needsOverwriteConfirm, t.status])
+  // Drop the local pending flag once the desktop confirms it heard us or the
+  // run ended — and after a short grace period even if neither happens, so a
+  // command that never landed can be retried instead of leaving the button
+  // disabled forever.
+  useEffect(() => {
+    if (!cancelPending) return undefined
+    if (!t.converting || t.cancelling) {
+      setCancelPending(false)
+      return undefined
+    }
+    const timer = setTimeout(() => setCancelPending(false), 4000)
+    return () => clearTimeout(timer)
+  }, [cancelPending, t.cancelling, t.converting])
 
   const commit = (options: Omit<Extract<RemoteCommand, { type: 'setOptions' }>, 'type' | 'taskId'>): void => {
     if (t.converting) return
@@ -78,6 +92,12 @@ function TaskDetailsInner({ task: t, sendCmd, onClose }: {
     setCommandPending(true)
     sendCmd({ type: 'convert', taskId: t.taskId, confirmOverwrite, crf, resolution, customRes, forceReencode })
   }
+  const cancelCommand = (): void => {
+    // Only show "Cancelling…" if the command actually went out; a failed send
+    // flips the page to Disconnected, which is the honest explanation.
+    if (sendCmd({ type: 'cancel', taskId: t.taskId })) setCancelPending(true)
+  }
+  const cancelling = t.cancelling || cancelPending
   const argumentRows = formatArgs(t.ffmpegArgs)
 
   return (
@@ -86,7 +106,7 @@ function TaskDetailsInner({ task: t, sendCmd, onClose }: {
       <div className="details-content">
         <div className="details-summary"><h2>{t.title}</h2>{t.detected && <div className="meta">{t.detected}</div>}{t.outputPath && <div className="meta">Output: {t.outputPath}</div>}{t.planSummary && <div className="meta">{t.planSummary}</div>}{t.resultText && <div className={'result ' + (t.resultSuccess ? 'success' : 'failure')}>{t.resultText}</div>}</div>
         <div className="actions details-actions">
-          {t.converting ? <button className="danger" onClick={() => sendCmd({ type: 'cancel', taskId: t.taskId })}>Cancel</button> : t.needsOverwriteConfirm ? <button className="danger" disabled={commandPending} onClick={() => startCommand(true)}>{commandPending ? 'Starting…' : 'Overwrite & Convert'}</button> : <button className="primary" disabled={!t.canConvert || commandPending} onClick={() => startCommand()}>{commandPending ? 'Starting…' : isFinished(t) ? 'Convert again' : 'Convert'}</button>}
+          {t.converting ? <button className="danger" disabled={cancelling} onClick={cancelCommand}>{cancelling ? 'Cancelling…' : 'Cancel'}</button> : t.needsOverwriteConfirm ? <button className="danger" disabled={commandPending} onClick={() => startCommand(true)}>{commandPending ? 'Starting…' : 'Overwrite & Convert'}</button> : <button className="primary" disabled={!t.canConvert || commandPending} onClick={() => startCommand()}>{commandPending ? 'Starting…' : isFinished(t) ? 'Convert again' : 'Convert'}</button>}
           <button onClick={() => { if (confirm(`Close "${t.title}"? This cannot be undone.`)) onClose(t.taskId) }}>Remove</button>
         </div>
         <div className={'opts' + (t.converting ? ' locked' : '')}>

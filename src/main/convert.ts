@@ -12,6 +12,7 @@ export interface ConvertHandlers {
 interface Job {
   child: ChildProcessWithoutNullStreams
   killTimer: NodeJS.Timeout | null
+  cancelled: boolean
 }
 
 // Keyed by taskId so each browser tab can run its own conversion concurrently.
@@ -51,7 +52,7 @@ export function startConversion(
     return
   }
 
-  const job: Job = { child, killTimer: null }
+  const job: Job = { child, killTimer: null, cancelled: false }
   jobs.set(taskId, job)
   let finished = false
 
@@ -115,6 +116,10 @@ export function startConversion(
   })
 
   child.once('close', (code) => {
+    if (job.cancelled) {
+      finish({ success: false, code, cancelled: true, error: 'Cancelled.' })
+      return
+    }
     finish({
       success: code === 0,
       code,
@@ -123,9 +128,18 @@ export function startConversion(
   })
 }
 
-export function cancelConversion(taskId: string): void {
+/**
+ * Ask a running conversion to stop. Returns false when no ffmpeg was running
+ * for that task, so callers can tell a real cancellation apart from a click on
+ * a task whose "converting" state was stale.
+ */
+export function cancelConversion(taskId: string): boolean {
   const job = jobs.get(taskId)
-  if (!job) return
+  if (!job) return false
+  // A second click must not re-arm the kill timer (which would leak the first
+  // one) — the process is already on its way out.
+  if (job.cancelled) return true
+  job.cancelled = true
 
   try {
     job.child.stdin.write('q\n')
@@ -136,4 +150,5 @@ export function cancelConversion(taskId: string): void {
   job.killTimer = setTimeout(() => {
     job.child.kill(process.platform === 'win32' ? undefined : 'SIGKILL')
   }, 3000)
+  return true
 }

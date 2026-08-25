@@ -62,6 +62,15 @@ const tasks = new Map<string, RemoteTaskSnapshot>()
 const pendingTaskBroadcasts = new Map<string, ReturnType<typeof setTimeout>>()
 let commandHandler: ((cmd: RemoteCommand) => void) | null = null
 
+// Without a heartbeat a connection that dies silently (laptop asleep, Wi-Fi
+// hand-off, phone locked) stays OPEN on both sides: the page keeps showing the
+// last state it received and every button click is sent into a black hole.
+// The server pings to reap dead sockets; the steady stream of heartbeat
+// messages lets the page notice the same thing and reconnect.
+const HEARTBEAT_MS = 5000
+const alive = new WeakSet<WebSocket>()
+let heartbeatTimer: ReturnType<typeof setInterval> | null = null
+
 export function getUrl(): string | null {
   return currentUrl
 }
@@ -228,10 +237,13 @@ export function startRemoteServer(port: number): Promise<{ url: string }> {
 
     socketServer.on('connection', (ws) => {
       clients.add(ws)
+      alive.add(ws)
+      ws.on('pong', () => alive.add(ws))
       send(ws, { type: 'hello', appVersion: app.getVersion() })
       send(ws, { type: 'snapshot', tasks: Array.from(tasks.values()) })
 
       ws.on('message', (data) => {
+        alive.add(ws)
         try {
           const cmd = JSON.parse(data.toString()) as RemoteCommand
 
@@ -265,6 +277,19 @@ export function startRemoteServer(port: number): Promise<{ url: string }> {
       ws.on('error', () => clients.delete(ws))
     })
 
+    heartbeatTimer = setInterval(() => {
+      for (const ws of clients) {
+        if (!alive.has(ws)) {
+          clients.delete(ws)
+          ws.terminate()
+          continue
+        }
+        alive.delete(ws)
+        ws.ping()
+      }
+      broadcast({ type: 'heartbeat' })
+    }, HEARTBEAT_MS)
+
     server.listen(port, () => {
       httpServer = server
       wss = socketServer
@@ -275,6 +300,8 @@ export function startRemoteServer(port: number): Promise<{ url: string }> {
 }
 
 export function stopRemoteServer(): void {
+  if (heartbeatTimer) clearInterval(heartbeatTimer)
+  heartbeatTimer = null
   for (const timer of pendingTaskBroadcasts.values()) clearTimeout(timer)
   pendingTaskBroadcasts.clear()
   for (const ws of clients) ws.terminate()

@@ -20,6 +20,8 @@ export interface RemoteTaskSnapshot {
   logTail: string[]
   canConvert: boolean
   converting: boolean
+  /** A cancel has been requested and ffmpeg is still shutting down. */
+  cancelling: boolean
   needsOverwriteConfirm: boolean
 }
 
@@ -36,6 +38,8 @@ export type RemoteServerMessage =
   | { type: 'update'; task: RemoteTaskSnapshot }
   | { type: 'remove'; taskId: string }
   | { type: 'stats'; cpuPercent: number; netRxBps: number; netTxBps: number }
+  /** Periodic liveness beacon — lets the page spot a silently dead socket. */
+  | { type: 'heartbeat' }
 
 export type RemoteCommand =
   | {

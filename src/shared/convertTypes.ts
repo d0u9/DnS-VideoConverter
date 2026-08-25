@@ -11,6 +11,8 @@ export interface ConvertDoneResult {
   code: number | null
   error?: string
   outputSizeBytes?: number
+  /** True when the run ended because it was cancelled, not because ffmpeg failed. */
+  cancelled?: boolean
 }
 
 export interface ConvertLogEvent {

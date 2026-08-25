@@ -287,10 +287,7 @@ function registerIpc(): void {
     }
   )
 
-  ipcMain.handle('convert:cancel', (_e, taskId: string) => {
-    cancelConversion(taskId)
-    return true
-  })
+  ipcMain.handle('convert:cancel', (_e, taskId: string) => cancelConversion(taskId))
 
   ipcMain.handle('shell:showInFolder', (_e, filePath: string) => {
     shell.showItemInFolder(filePath)
@@ -338,6 +335,13 @@ app.whenReady().then(() => {
   createWindow()
 
   onRemoteCommand((cmd) => {
+    // Cancel is acted on here as well as in the renderer. Routing it only
+    // through a task panel makes it a silent no-op whenever no panel matches
+    // the id any more (window reloaded, tab replaced, snapshot out of date) —
+    // the ffmpeg process would keep running with no way to stop it from the
+    // web page. cancelConversion() is a no-op when nothing is running.
+    if (cmd.type === 'cancel') cancelConversion(cmd.taskId)
+
     for (const win of BrowserWindow.getAllWindows()) {
       if (!win.webContents.isDestroyed()) win.webContents.send('server:command', cmd)
     }

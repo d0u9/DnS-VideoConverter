@@ -86,7 +86,12 @@ export default function TaskPanel({
 
   const [converting, setConverting] = useState(false)
   const [starting, setStarting] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
   const startingRef = useRef(false)
+  // Set when a cancel arrives while a run is still being set up, so the
+  // conversion is stopped as soon as ffmpeg exists instead of the click being
+  // swallowed by the gap between "converting" and the process actually running.
+  const cancelRequestedRef = useRef(false)
   const [needsOverwriteConfirm, setNeedsOverwriteConfirm] = useState(false)
   const [progress, setProgress] = useState<ConvertProgress | null>(null)
   const [logLines, setLogLines] = useState<string[]>([])
@@ -170,7 +175,9 @@ export default function TaskPanel({
         : doneResult
         ? doneResult.success
           ? `Succeeded — ${sizeChangeText(probe?.fileSizeBytes, doneResult.outputSizeBytes)}`
-          : (doneResult.error ?? 'Failed')
+          : doneResult.cancelled
+            ? 'Cancelled — the output file is incomplete.'
+            : (doneResult.error ?? 'Failed')
         : null,
       resultSuccess: taskError ? false : doneResult ? doneResult.success : null,
       // Live ffmpeg output is intentionally kept on the desktop. The remote
@@ -178,13 +185,14 @@ export default function TaskPanel({
       logTail:
         taskError
           ? [`${probeStatus === 'error' ? 'ffprobe' : 'configuration'} failed: ${taskError}`]
-          : doneResult && !doneResult.success
+          : doneResult && !doneResult.success && !doneResult.cancelled
             ? logLines.length > 0
               ? logLines.slice(-150)
               : [doneResult.error ?? 'ffmpeg failed without producing diagnostic output.']
             : [],
       canConvert,
       converting,
+      cancelling,
       needsOverwriteConfirm
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -193,6 +201,7 @@ export default function TaskPanel({
     title,
     status,
     converting,
+    cancelling,
     progress,
     progressText,
     probe,
@@ -234,6 +243,7 @@ export default function TaskPanel({
     const offDone = window.api.onConvertDone((e) => {
       if (e.taskId !== taskId) return
       setConverting(false)
+      setCancelling(false)
       setDoneResult(e.result)
     })
     return () => {
@@ -362,6 +372,8 @@ export default function TaskPanel({
     // same task again and report a misleading "already running" error.
     if (startingRef.current || convertingRef.current) return
     startingRef.current = true
+    cancelRequestedRef.current = false
+    setCancelling(false)
     setStarting(true)
     try {
     if (!probe || !inputPath || !outputPath.trim()) return
@@ -435,7 +447,12 @@ export default function TaskPanel({
 
     if (!res.ok) {
       setConverting(false)
+      setCancelling(false)
       setDoneResult({ success: false, code: null, error: res.error })
+    } else if (cancelRequestedRef.current) {
+      // Cancelled while ffmpeg was still being launched — stop it now that
+      // there is a process to stop.
+      window.api.cancelConvert(taskId)
     }
     } finally {
       startingRef.current = false
@@ -444,7 +461,17 @@ export default function TaskPanel({
   }
 
   const handleCancel = async (): Promise<void> => {
-    await window.api.cancelConvert(taskId)
+    cancelRequestedRef.current = true
+    setCancelling(true)
+    const stopped = await window.api.cancelConvert(taskId)
+    // Nothing was running: this task's "converting" state was stale (it can
+    // outlive the ffmpeg process if a done event was ever missed). Reconcile
+    // instead of leaving the panel stuck on a progress bar that never moves.
+    if (!stopped && !startingRef.current) {
+      setConverting(false)
+      setCancelling(false)
+      setDoneResult({ success: false, code: null, cancelled: true, error: 'Cancelled.' })
+    }
   }
 
   // Let the remote web viewer trigger the same actions as the local buttons.
@@ -692,12 +719,18 @@ export default function TaskPanel({
             <span className="result-icon">{doneResult.success ? '✓' : '✗'}</span>
             <div className="result-text">
               <div className="result-title">
-                {doneResult.success ? 'Conversion succeeded' : 'Conversion failed'}
+                {doneResult.success
+                  ? 'Conversion succeeded'
+                  : doneResult.cancelled
+                    ? 'Conversion cancelled'
+                    : 'Conversion failed'}
               </div>
               <div className="result-detail">
                 {doneResult.success
                   ? sizeChangeText(probe?.fileSizeBytes, doneResult.outputSizeBytes)
-                  : (doneResult.error ?? 'Unknown error')}
+                  : doneResult.cancelled
+                    ? 'The output file is incomplete.'
+                    : (doneResult.error ?? 'Unknown error')}
               </div>
             </div>
           </div>
@@ -714,8 +747,8 @@ export default function TaskPanel({
               {starting ? 'Starting…' : doneResult ? 'Convert again' : 'Convert'}
             </button>
           ) : (
-            <button type="button" className="danger" onClick={handleCancel}>
-              Cancel
+            <button type="button" className="danger" disabled={cancelling} onClick={handleCancel}>
+              {cancelling ? 'Cancelling…' : 'Cancel'}
             </button>
           )}
 

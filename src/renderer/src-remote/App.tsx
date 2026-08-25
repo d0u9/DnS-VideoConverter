@@ -56,7 +56,9 @@ export default function App(): React.JSX.Element {
     setSelectedTaskId(taskId)
   }, [])
   const handleCloseTask = useCallback(
-    (taskId: string): void => sendCmd({ type: 'closeTask', taskId }),
+    (taskId: string): void => {
+      sendCmd({ type: 'closeTask', taskId })
+    },
     [sendCmd]
   )
 
