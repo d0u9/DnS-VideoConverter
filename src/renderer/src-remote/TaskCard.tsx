@@ -11,6 +11,22 @@ const STATUS_LABEL: Record<string, string> = {
   idle: 'Idle', probing: 'Probing…', ready: 'Ready', converting: 'Converting', done: 'Done', error: 'Error'
 }
 
+const VALUELESS_ARGS = new Set(['-y', '-nostats'])
+
+function formatArgs(args: string[]): Array<{ flag: string | null; value: string }> {
+  const rows: Array<{ flag: string | null; value: string }> = []
+  for (let i = 0; i < args.length; i++) {
+    const token = args[i]
+    if (token.startsWith('-')) {
+      if (VALUELESS_ARGS.has(token)) rows.push({ flag: token, value: '' })
+      else rows.push({ flag: token, value: args[++i] ?? '' })
+    } else {
+      rows.push({ flag: null, value: token })
+    }
+  }
+  return rows
+}
+
 export function isFinished(t: RemoteTaskSnapshot): boolean {
   return t.status === 'done' || (t.status === 'error' && !!t.resultText)
 }
@@ -62,6 +78,7 @@ function TaskDetailsInner({ task: t, sendCmd, onClose }: {
     setCommandPending(true)
     sendCmd({ type: 'convert', taskId: t.taskId, confirmOverwrite, crf, resolution, customRes, forceReencode })
   }
+  const argumentRows = formatArgs(t.ffmpegArgs)
 
   return (
     <section className="task-details">
@@ -78,6 +95,20 @@ function TaskDetailsInner({ task: t, sendCmd, onClose }: {
           {resolution === 'custom' && <label>Custom<input disabled={t.converting} type="text" value={customRes} placeholder="1920x1080" onChange={(e) => setCustomRes(e.target.value)} onFocus={() => { customResFocused.current = true }} onBlur={() => { customResFocused.current = false; commit({ customRes }) }} /></label>}
           {t.isHevc && <label className="checkbox-opt"><input disabled={t.converting} type="checkbox" checked={forceReencode} onChange={(e) => { setForceReencode(e.target.checked); commit({ forceReencode: e.target.checked }) }} />Force re-encode</label>}
         </div>
+        {argumentRows.length > 0 && (
+          <details className="ffmpeg-args" open>
+            <summary>FFmpeg arguments ({t.ffmpegArgs.length})</summary>
+            <div className="ffmpeg-arg-list">
+              <div className="ffmpeg-executable">ffmpeg</div>
+              {argumentRows.map((row, index) => (
+                <div className="ffmpeg-arg-row" key={`${index}-${row.flag ?? 'output'}`}>
+                  <code className="ffmpeg-flag">{row.flag ?? 'output'}</code>
+                  <code className="ffmpeg-value">{row.value || '—'}</code>
+                </div>
+              ))}
+            </div>
+          </details>
+        )}
         {t.converting && <><div className="progress-track"><div className="progress-fill" style={{ width: `${t.progressPercent || 0}%` }} /></div><div className="meta">{progressText}</div></>}
         {t.needsOverwriteConfirm && <div className="overwrite-warn">Output file already exists — converting will overwrite it.</div>}
         {t.status === 'error' && t.logTail.length > 0 && <div className="log error-log">{t.logTail.join('\n')}</div>}

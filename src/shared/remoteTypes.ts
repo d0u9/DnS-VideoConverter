@@ -13,6 +13,8 @@ export interface RemoteTaskSnapshot {
   isHevc: boolean
   detected: string | null
   planSummary: string | null
+  /** Exact arguments passed to ffmpeg, excluding the executable path. */
+  ffmpegArgs: string[]
   resultText: string | null
   resultSuccess: boolean | null
   logTail: string[]

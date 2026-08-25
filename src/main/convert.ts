@@ -37,7 +37,7 @@ export function startConversion(
     return
   }
 
-  const fullArgs = ['-y', '-progress', 'pipe:1', '-nostats', ...args]
+  const fullArgs = ['-progress', 'pipe:1', '-nostats', ...args]
 
   let child: ChildProcessWithoutNullStreams
   try {

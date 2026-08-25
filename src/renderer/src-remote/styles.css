@@ -195,6 +195,13 @@ summary { font-size: 12px; color: var(--muted); cursor: pointer; }
 .details-actions { position: sticky; top: 0; z-index: 2; margin: 6px -4px 10px; padding: 6px 4px; background: var(--panel); }
 .details-empty { height: 100%; display: grid; place-items: center; color: var(--muted); font-size: 12px; }
 .error-log { margin-top: 10px; max-height: 150px; }
+.ffmpeg-args { margin: 10px 0; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+.ffmpeg-args > summary { padding: 8px 10px; background: var(--bg); font-weight: 600; }
+.ffmpeg-arg-list { padding: 7px 10px 10px; background: var(--log-bg); color: var(--log-text); }
+.ffmpeg-executable { padding: 3px 0 7px; color: var(--ok); font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 700; }
+.ffmpeg-arg-row { display: grid; grid-template-columns: minmax(90px, 145px) minmax(0, 1fr); gap: 10px; padding: 3px 0; border-top: 1px solid rgba(255,255,255,.06); }
+.ffmpeg-flag { color: #8fb7ff; }
+.ffmpeg-value { min-width: 0; color: var(--log-text); white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (max-width: 850px) {
   .task-grid-head, .task-row { grid-template-columns: minmax(150px, 1fr) 100px 110px; }
   .task-grid-head span:nth-child(3), .task-row .plan-cell { display: none; }

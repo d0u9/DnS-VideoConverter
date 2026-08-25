@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { ConvertOptions, FfmpegPlan, ProbeResult } from '@shared/ffmpegPlan'
+import { buildFfmpegCommandArgs, type ConvertOptions, type FfmpegPlan, type ProbeResult } from '@shared/ffmpegPlan'
 import type { Settings } from '@shared/settings'
 import type { ConvertDoneResult, ConvertProgress } from '@shared/convertTypes'
 import { defaultOutputPath, formatBitrate, formatBytes, formatDuration } from './format'
@@ -159,6 +159,10 @@ export default function TaskPanel({
             plan.willCopyVideo ? 'copy (HEVC)' : 'encode x265'
           } · Audio: ${plan.willCopyAudio ? 'copy (AAC)' : 'encode AAC'}`
         : null,
+      ffmpegArgs:
+        inputPath && outputPath && plan
+          ? ['-progress', 'pipe:1', '-nostats', ...buildFfmpegCommandArgs(inputPath, outputPath, plan)]
+          : [],
       resultText: taskError
         ? probeStatus === 'error'
           ? `Probe failed — ${taskError}`
