@@ -75,7 +75,7 @@ function FileTree({
   width,
   onWidthChange
 }: {
-  onLoadFile: (path: string, options: RemoteTaskOptions) => void
+  onLoadFile: (path: string, options: RemoteTaskOptions, startImmediately: boolean) => void
   width: number
   onWidthChange: (w: number) => void
 }): React.JSX.Element {
@@ -144,9 +144,9 @@ function FileTree({
       .catch(() => setLoadError(true))
   }
 
-  const handleConfirmLoad = (): void => {
+  const handleConfirmLoad = (startImmediately: boolean): void => {
     if (!pendingFile) return
-    onLoadFile(pendingFile.path, { crf, resolution, customRes, forceReencode })
+    onLoadFile(pendingFile.path, { crf, resolution, customRes, forceReencode }, startImmediately)
     setPendingFile(null)
   }
 
@@ -220,7 +220,11 @@ function FileTree({
               {resolution === 'custom' && <label>Custom max size<input type="text" value={customRes} onChange={(e) => setCustomRes(e.target.value)} placeholder="1920x1080" /></label>}
               <label className="modal-checkbox"><input type="checkbox" checked={forceReencode} onChange={(e) => setForceReencode(e.target.checked)} />Force video re-encode</label>
             </div>
-            <div className="modal-actions"><button onClick={() => setPendingFile(null)}>Cancel</button><button className="primary" disabled={!crf.trim() || (resolution === 'custom' && !customRes.trim())} onClick={handleConfirmLoad}>Add & Convert</button></div>
+            <div className="modal-actions">
+              <button onClick={() => setPendingFile(null)}>Cancel</button>
+              <button disabled={!crf.trim() || (resolution === 'custom' && !customRes.trim())} onClick={() => handleConfirmLoad(false)}>Add</button>
+              <button className="primary" disabled={!crf.trim() || (resolution === 'custom' && !customRes.trim())} onClick={() => handleConfirmLoad(true)}>Add &amp; Convert</button>
+            </div>
           </div>
         </div>
       )}

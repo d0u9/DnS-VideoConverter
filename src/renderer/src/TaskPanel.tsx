@@ -96,6 +96,9 @@ export default function TaskPanel({
   const [commandOpen, setCommandOpen] = useState(false)
   const logRef = useRef<HTMLDivElement>(null)
   const autoStartRef = useRef(initialAutoStart === true)
+  const crfRef = useRef(crf)
+  const previousCrfRef = useRef(crf)
+  crfRef.current = crf
 
   const title = inputPath ? (inputPath.split(/[/\\]/).pop() ?? inputPath) : 'New Task'
   const configurationError = probe && !settings.ffmpegPath ? 'ffmpeg is not configured or could not be found.' : null
@@ -262,7 +265,7 @@ export default function TaskPanel({
       if (res.ok) {
         setProbe(res.data)
         setProbeStatus('idle')
-        setOutputPath(defaultOutputPath(inputPath))
+        setOutputPath(defaultOutputPath(inputPath, crfRef.current))
       } else {
         setProbeStatus('error')
         setProbeError(res.error)
@@ -274,6 +277,16 @@ export default function TaskPanel({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inputPath])
+
+  // Keep an automatically generated output directory aligned with CRF edits,
+  // while preserving any output path the user chose manually.
+  useEffect(() => {
+    if (inputPath) {
+      const previousDefault = defaultOutputPath(inputPath, previousCrfRef.current)
+      setOutputPath((current) => current === previousDefault ? defaultOutputPath(inputPath, crf) : current)
+    }
+    previousCrfRef.current = crf
+  }, [crf, inputPath])
 
   // Rebuild the ffmpeg plan whenever probe results or options change.
   useEffect(() => {

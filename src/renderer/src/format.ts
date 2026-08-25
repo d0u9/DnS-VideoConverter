@@ -17,9 +17,10 @@ export function joinPath(dir: string, file: string): string {
   return dir.endsWith(sep) ? `${dir}${file}` : `${dir}${sep}${file}`
 }
 
-/** Default output path: <input's folder>/dns-output/<input basename>.mp4 */
-export function defaultOutputPath(inputPath: string): string {
-  const outDir = joinPath(dirname(inputPath), 'dns-output')
+/** Default output path: <input folder>/dns-output-<crf>/<input basename>.mp4 */
+export function defaultOutputPath(inputPath: string, crf: string | number): string {
+  const crfSuffix = String(crf).trim().replace(/[^0-9.]+/g, '_') || 'unknown'
+  const outDir = joinPath(dirname(inputPath), `dns-output-${crfSuffix}`)
   return joinPath(outDir, `${basenameNoExt(inputPath)}.mp4`)
 }
 

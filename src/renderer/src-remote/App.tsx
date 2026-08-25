@@ -46,11 +46,11 @@ export default function App(): React.JSX.Element {
   )
 
   const selectedTask = selectedTaskId ? state.tasks[selectedTaskId] : null
-  const handleLoadFile = useCallback((path: string, options: RemoteTaskOptions): void => {
+  const handleLoadFile = useCallback((path: string, options: RemoteTaskOptions, startImmediately: boolean): void => {
     // File-tree additions always create a new task. Existing tasks are edited
     // and re-run from Details, avoiding accidental replacement of a selection.
     selectNextCreatedTask.current = true
-    sendCmd({ type: 'newTask', inputPath: path, startImmediately: true, ...options })
+    sendCmd({ type: 'newTask', inputPath: path, startImmediately, ...options })
   }, [sendCmd])
   const handleSelectTask = useCallback((taskId: string): void => {
     setSelectedTaskId(taskId)
