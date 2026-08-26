@@ -157,16 +157,24 @@ summary { font-size: 12px; color: var(--muted); cursor: pointer; }
 .main-header { padding: 10px 12px 0; border-bottom: 1px solid var(--border); background: var(--panel); }
 .hint { margin: 6px 0 9px; }
 .filters { margin-bottom: 9px; }
-.task-grid { flex: 1; min-height: 150px; display: flex; flex-direction: column; overflow: hidden; background: var(--panel); }
+.task-grid { flex: 1; min-height: 150px; overflow: auto; background: var(--panel); }
 .task-grid-head, .task-row {
-  display: grid; grid-template-columns: minmax(180px, 1.35fr) 120px minmax(220px, 1fr) 150px;
+  display: grid; grid-template-columns: var(--task-columns);
   align-items: center; column-gap: 12px;
+  width: var(--task-grid-width); min-width: 100%;
 }
 .task-grid-head {
-  flex-shrink: 0; padding: 7px 12px; border-bottom: 1px solid var(--border); background: var(--bg);
+  position: sticky; z-index: 4; top: 0; padding: 0 12px; border-bottom: 1px solid var(--border); background: var(--bg);
   color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em;
 }
-.task-grid-body { flex: 1; overflow: auto; }
+.task-grid-body { width: var(--task-grid-width); min-width: 100%; }
+.column-head { position: relative; min-width: 0; }
+.column-head > button { width: 100%; padding: 7px 8px 7px 0; border: 0; border-radius: 0; background: transparent; color: inherit; font: inherit; letter-spacing: inherit; text-align: left; text-transform: inherit; }
+.column-head > button:hover { color: var(--text); }
+.sort-arrow { display: inline-block; min-width: 12px; margin-left: 5px; font-size: 8px; }
+.column-resizer { position: absolute; z-index: 2; top: 0; right: -7px; width: 12px; height: 100%; cursor: col-resize; }
+.column-resizer::after { content: ''; position: absolute; top: 4px; bottom: 4px; left: 5px; width: 1px; background: var(--border); }
+.column-resizer:hover::after { width: 2px; background: var(--accent); }
 .task-row {
   width: 100%; padding: 7px 12px; border: 0; border-bottom: 1px solid var(--border); border-radius: 0;
   background: var(--panel); text-align: left; font-size: 12px;
@@ -202,10 +210,6 @@ summary { font-size: 12px; color: var(--muted); cursor: pointer; }
 .ffmpeg-arg-row { display: grid; grid-template-columns: minmax(90px, 145px) minmax(0, 1fr); gap: 10px; padding: 3px 0; border-top: 1px solid rgba(255,255,255,.06); }
 .ffmpeg-flag { color: #8fb7ff; }
 .ffmpeg-value { min-width: 0; color: var(--log-text); white-space: pre-wrap; overflow-wrap: anywhere; }
-@media (max-width: 850px) {
-  .task-grid-head, .task-row { grid-template-columns: minmax(150px, 1fr) 100px 110px; }
-  .task-grid-head span:nth-child(3), .task-row .plan-cell { display: none; }
-}
 .modal-backdrop { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 20px; background: rgba(0, 0, 0, .48); }
 .add-task-modal { width: min(520px, 100%); border: 1px solid var(--border); border-radius: 10px; background: var(--panel); box-shadow: 0 18px 55px rgba(0,0,0,.3); }
 .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 13px 16px; border-bottom: 1px solid var(--border); }

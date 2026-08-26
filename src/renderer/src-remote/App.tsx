@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { formatBytes } from '@shared/format'
 import { useRemoteConnection } from './useRemoteConnection'
 import TaskCard, { TaskDetails } from './TaskCard'
@@ -6,6 +6,16 @@ import FileTree from './FileTree'
 import type { RemoteTaskOptions } from '@shared/remoteTypes'
 
 type Filter = 'all' | 'processing' | 'finished' | 'error'
+type SortKey = 'name' | 'status' | 'plan' | 'progress'
+type SortDirection = 'asc' | 'desc'
+
+const COLUMN_MIN_WIDTHS = [160, 90, 180, 110]
+const COLUMN_LABELS: Array<{ key: SortKey; label: string }> = [
+  { key: 'name', label: 'Name' },
+  { key: 'status', label: 'Status' },
+  { key: 'plan', label: 'Conversion plan' },
+  { key: 'progress', label: 'Progress' }
+]
 
 export default function App(): React.JSX.Element {
   const { state, sendCmd } = useRemoteConnection()
@@ -13,9 +23,12 @@ export default function App(): React.JSX.Element {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const [sidebarWidth, setSidebarWidth] = useState(260)
   const [detailsHeight, setDetailsHeight] = useState(360)
+  const [columnWidths, setColumnWidths] = useState([320, 120, 420, 150])
+  const [sort, setSort] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'name', direction: 'asc' })
   const selectNextCreatedTask = useRef(false)
   const previousOrder = useRef(state.order)
   const resizingDetails = useRef(false)
+  const resizingColumn = useRef<{ index: number; startX: number; startWidth: number } | null>(null)
 
   const counts = useMemo(() => {
     const all = state.order.length
@@ -32,18 +45,28 @@ export default function App(): React.JSX.Element {
     return { all, processing, finished, error }
   }, [state.order, state.tasks])
 
-  const visibleIds = useMemo(
-    () =>
-      state.order.filter((id) => {
+  const visibleIds = useMemo(() => {
+    const ids = state.order.filter((id) => {
         const t = state.tasks[id]
         if (!t) return false
         if (filter === 'processing') return t.status === 'converting'
         if (filter === 'finished') return t.status === 'done'
         if (filter === 'error') return t.status === 'error'
         return true
-      }),
-    [filter, state.order, state.tasks]
-  )
+      })
+    const direction = sort.direction === 'asc' ? 1 : -1
+    return ids.sort((a, b) => {
+      const left = state.tasks[a]
+      const right = state.tasks[b]
+      if (!left || !right) return 0
+      let comparison = 0
+      if (sort.key === 'name') comparison = left.title.localeCompare(right.title, undefined, { numeric: true })
+      else if (sort.key === 'status') comparison = left.status.localeCompare(right.status)
+      else if (sort.key === 'plan') comparison = (left.planSummary ?? '').localeCompare(right.planSummary ?? '')
+      else comparison = (left.progressPercent ?? (left.status === 'done' ? 100 : -1)) - (right.progressPercent ?? (right.status === 'done' ? 100 : -1))
+      return comparison === 0 ? state.order.indexOf(a) - state.order.indexOf(b) : comparison * direction
+    })
+  }, [filter, sort, state.order, state.tasks])
 
   const selectedTask = selectedTaskId ? state.tasks[selectedTaskId] : null
   const handleLoadFile = useCallback((path: string, options: RemoteTaskOptions, startImmediately: boolean): void => {
@@ -78,10 +101,18 @@ export default function App(): React.JSX.Element {
 
   useEffect(() => {
     const onMove = (e: MouseEvent): void => {
+      const column = resizingColumn.current
+      if (column) {
+        const width = Math.max(COLUMN_MIN_WIDTHS[column.index], column.startWidth + e.clientX - column.startX)
+        setColumnWidths((current) => current.map((value, index) => index === column.index ? width : value))
+      }
       if (!resizingDetails.current) return
       setDetailsHeight(Math.max(140, Math.min(window.innerHeight - 170, window.innerHeight - e.clientY)))
     }
-    const onUp = (): void => { resizingDetails.current = false }
+    const onUp = (): void => {
+      resizingDetails.current = false
+      resizingColumn.current = null
+    }
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
     return () => {
@@ -89,6 +120,18 @@ export default function App(): React.JSX.Element {
       window.removeEventListener('mouseup', onUp)
     }
   }, [])
+
+  const toggleSort = (key: SortKey): void => {
+    setSort((current) => current.key === key
+      ? { key, direction: current.direction === 'asc' ? 'desc' : 'asc' }
+      : { key, direction: 'asc' })
+  }
+
+  const taskGridStyle = {
+    '--task-columns': columnWidths.map((width) => `${width}px`).join(' '),
+    // Three 12px column gaps plus 24px horizontal row padding.
+    '--task-grid-width': `${columnWidths.reduce((sum, width) => sum + width, 0) + 60}px`
+  } as CSSProperties
 
   return (
     <div className="app-body">
@@ -138,8 +181,24 @@ export default function App(): React.JSX.Element {
           </div>
         </div>
 
-        <div className="task-grid">
-          <div className="task-grid-head"><span>Name</span><span>Status</span><span>Conversion plan</span><span>Progress</span></div>
+        <div className="task-grid" style={taskGridStyle}>
+          <div className="task-grid-head">
+            {COLUMN_LABELS.map((column, index) => (
+              <div className="column-head" key={column.key} aria-sort={sort.key === column.key ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}>
+                <button type="button" onClick={() => toggleSort(column.key)}>
+                  {column.label}<span className="sort-arrow">{sort.key === column.key ? (sort.direction === 'asc' ? '▲' : '▼') : ''}</span>
+                </button>
+                <span
+                  className="column-resizer"
+                  onMouseDown={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    resizingColumn.current = { index, startX: e.clientX, startWidth: columnWidths[index] }
+                  }}
+                />
+              </div>
+            ))}
+          </div>
           <div className="task-grid-body">
           {state.order.length === 0 && <div className="empty">No tasks yet.</div>}
           {state.order.length > 0 && visibleIds.length === 0 && <div className="empty">No {filter} tasks.</div>}
