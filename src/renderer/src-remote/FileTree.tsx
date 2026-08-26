@@ -21,9 +21,10 @@ interface TreeNodeProps {
   treeCache: Record<string, BrowseEntry[]>
   onToggle: (path: string) => void
   onFile: (path: string) => void
+  onRename: (entry: BrowseEntry) => void
 }
 
-function TreeNodes({ entries, depth, expanded, treeCache, onToggle, onFile }: TreeNodeProps): React.JSX.Element {
+function TreeNodes({ entries, depth, expanded, treeCache, onToggle, onFile, onRename }: TreeNodeProps): React.JSX.Element {
   return (
     <>
       {entries.map((e) => {
@@ -49,6 +50,7 @@ function TreeNodes({ entries, depth, expanded, treeCache, onToggle, onFile }: Tr
                   treeCache={treeCache}
                   onToggle={onToggle}
                   onFile={onFile}
+                  onRename={onRename}
                 />
               )}
             </div>
@@ -59,6 +61,7 @@ function TreeNodes({ entries, depth, expanded, treeCache, onToggle, onFile }: Tr
             <span className="arrow" />
             <span className="icon">🎬</span>
             <span className="name">{e.name}</span>
+            <button className="tree-rename" title="Rename" onClick={(event) => { event.stopPropagation(); onRename(e) }}>✎</button>
           </div>
         )
       })}
@@ -84,6 +87,10 @@ function FileTree({
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [loadError, setLoadError] = useState(false)
   const [pendingFile, setPendingFile] = useState<PendingFile | null>(null)
+  const [renameEntry, setRenameEntry] = useState<BrowseEntry | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const [renameError, setRenameError] = useState<string | null>(null)
+  const [renaming, setRenaming] = useState(false)
   const [crf, setCrf] = useState('24')
   const [resolution, setResolution] = useState('original')
   const [customRes, setCustomRes] = useState('1920x1080')
@@ -117,6 +124,40 @@ function FileTree({
 
   const handleFile = (path: string): void => {
     setPendingFile({ path })
+  }
+
+  const beginRename = (entry: BrowseEntry): void => {
+    setRenameEntry(entry)
+    setRenameValue(entry.name)
+    setRenameError(null)
+  }
+
+  const handleRename = async (): Promise<void> => {
+    if (!renameEntry || renaming) return
+    setRenaming(true)
+    setRenameError(null)
+    try {
+      const response = await fetch('/api/rename', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: renameEntry.path, newName: renameValue })
+      })
+      const data = await response.json() as { entry?: BrowseEntry; error?: string }
+      if (!response.ok || !data.entry) {
+        setRenameError(data.error ?? 'Rename failed.')
+        return
+      }
+      const replaceEntry = (entries: BrowseEntry[]): BrowseEntry[] =>
+        entries.map((entry) => entry.path === renameEntry.path ? data.entry! : entry)
+          .sort((a, b) => a.name.localeCompare(b.name))
+      setRootEntries((entries) => entries ? replaceEntry(entries) : entries)
+      setTreeCache((cache) => Object.fromEntries(Object.entries(cache).map(([key, entries]) => [key, replaceEntry(entries)])))
+      setRenameEntry(null)
+    } catch {
+      setRenameError('Could not contact the desktop app.')
+    } finally {
+      setRenaming(false)
+    }
   }
 
   const handleRefresh = (): void => {
@@ -201,6 +242,7 @@ function FileTree({
               treeCache={treeCache}
               onToggle={handleToggle}
               onFile={handleFile}
+              onRename={beginRename}
             />
           )}
         </div>
@@ -225,6 +267,18 @@ function FileTree({
               <button disabled={!crf.trim() || (resolution === 'custom' && !customRes.trim())} onClick={() => handleConfirmLoad(false)}>Add</button>
               <button className="primary" disabled={!crf.trim() || (resolution === 'custom' && !customRes.trim())} onClick={() => handleConfirmLoad(true)}>Add &amp; Convert</button>
             </div>
+          </div>
+        </div>
+      )}
+      {renameEntry && (
+        <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget && !renaming) setRenameEntry(null) }}>
+          <div className="rename-modal" role="dialog" aria-modal="true" aria-labelledby="rename-title">
+            <div className="modal-head"><h2 id="rename-title">Rename video</h2><button className="modal-close" disabled={renaming} onClick={() => setRenameEntry(null)} aria-label="Close">×</button></div>
+            <div className="rename-body">
+              <label>File name<input autoFocus type="text" value={renameValue} onChange={(e) => setRenameValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void handleRename() }} /></label>
+              {renameError && <div className="rename-error">{renameError}</div>}
+            </div>
+            <div className="modal-actions"><button disabled={renaming} onClick={() => setRenameEntry(null)}>Cancel</button><button className="primary" disabled={renaming || !renameValue.trim()} onClick={() => void handleRename()}>{renaming ? 'Renaming…' : 'Rename'}</button></div>
           </div>
         </div>
       )}

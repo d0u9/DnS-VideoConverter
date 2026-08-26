@@ -45,6 +45,10 @@ body {
 .tree-row .arrow { flex-shrink: 0; width: 12px; font-size: 10px; color: var(--muted); }
 .tree-row .icon { flex-shrink: 0; }
 .tree-row .name { overflow: hidden; text-overflow: ellipsis; }
+.tree-row .name { flex: 1; }
+.tree-rename { flex-shrink: 0; width: 24px; height: 22px; padding: 0; border: 0; opacity: 0; color: var(--muted); background: transparent; }
+.tree-row:hover .tree-rename, .tree-rename:focus-visible { opacity: 1; }
+.tree-rename:hover { color: var(--accent); background: var(--panel); }
 .tree-empty { padding: 12px; font-size: 12px; color: var(--muted); }
 .resize-handle {
   flex-shrink: 0; width: 5px; cursor: col-resize; background: transparent;
@@ -212,6 +216,11 @@ summary { font-size: 12px; color: var(--muted); cursor: pointer; }
 .ffmpeg-value { min-width: 0; color: var(--log-text); white-space: pre-wrap; overflow-wrap: anywhere; }
 .modal-backdrop { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 20px; background: rgba(0, 0, 0, .48); }
 .add-task-modal { width: min(520px, 100%); border: 1px solid var(--border); border-radius: 10px; background: var(--panel); box-shadow: 0 18px 55px rgba(0,0,0,.3); }
+.rename-modal { width: min(430px, 100%); border: 1px solid var(--border); border-radius: 10px; background: var(--panel); box-shadow: 0 18px 55px rgba(0,0,0,.3); }
+.rename-body { padding: 16px; }
+.rename-body label { display: flex; flex-direction: column; gap: 6px; color: var(--muted); font-size: 12px; font-weight: 600; }
+.rename-body input { min-height: 36px; padding: 6px 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--text); font-size: 13px; }
+.rename-error { margin-top: 10px; padding: 8px 10px; border-radius: 6px; background: var(--danger-bg); color: var(--danger); font-size: 12px; }
 .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 13px 16px; border-bottom: 1px solid var(--border); }
 .modal-head h2 { margin: 0; font-size: 16px; }
 .modal-close { border: 0; padding: 2px 6px; font-size: 20px; color: var(--muted); }

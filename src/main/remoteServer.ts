@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http'
 import { networkInterfaces } from 'node:os'
-import { readdirSync, readFileSync, existsSync } from 'node:fs'
+import { readdirSync, readFileSync, existsSync, renameSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { WebSocketServer, type WebSocket } from 'ws'
 import type {
@@ -187,6 +187,63 @@ function browseDirectory(targetPath: string): BrowseResponse | { error: string; 
   }
 }
 
+function renameVideo(sourcePath: string, newName: string): BrowseEntry | { error: string; status: number } {
+  const roots = loadSettings().remoteBrowseRoots
+  if (!findAllowedRoot(sourcePath, roots)) return { error: 'Path is outside the configured folders.', status: 403 }
+  const trimmed = newName.trim()
+  if (!trimmed || trimmed === '.' || trimmed === '..' || /[\\/]/.test(trimmed)) {
+    return { error: 'Enter a valid file name without folder separators.', status: 400 }
+  }
+  if (!VIDEO_EXTENSIONS.has(path.extname(trimmed).toLowerCase())) {
+    return { error: 'The renamed file must keep a supported video extension.', status: 400 }
+  }
+  try {
+    if (!statSync(sourcePath).isFile()) return { error: 'Only video files can be renamed.', status: 400 }
+  } catch {
+    return { error: 'The source file no longer exists.', status: 404 }
+  }
+  const targetPath = path.join(path.dirname(sourcePath), trimmed)
+  if (!findAllowedRoot(targetPath, roots)) return { error: 'Target path is outside the configured folders.', status: 403 }
+  if (targetPath === sourcePath) return { name: trimmed, path: targetPath, isDir: false }
+  if (existsSync(targetPath)) return { error: 'A file with that name already exists.', status: 409 }
+  try {
+    renameSync(sourcePath, targetPath)
+    return { name: trimmed, path: targetPath, isDir: false }
+  } catch (err) {
+    return { error: (err as Error).message, status: 500 }
+  }
+}
+
+function handleRenameRequest(req: IncomingMessage, res: ServerResponse): void {
+  let body = ''
+  req.setEncoding('utf8')
+  req.on('data', (chunk: string) => {
+    body += chunk
+    if (body.length > 16_384) req.destroy()
+  })
+  req.on('end', () => {
+    try {
+      const payload = JSON.parse(body) as { path?: unknown; newName?: unknown }
+      if (typeof payload.path !== 'string' || typeof payload.newName !== 'string') {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: 'Invalid rename request.' }))
+        return
+      }
+      const result = renameVideo(payload.path, payload.newName)
+      if ('error' in result) {
+        res.writeHead(result.status, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: result.error }))
+        return
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ entry: result }))
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'Invalid JSON request.' }))
+    }
+  })
+}
+
 function localLanUrl(port: number): string {
   const nets = networkInterfaces()
   for (const ifaceList of Object.values(nets)) {
@@ -219,6 +276,11 @@ export function startRemoteServer(port: number): Promise<{ url: string }> {
         }
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify(result))
+        return
+      }
+
+      if (req.method === 'POST' && url.pathname === '/api/rename') {
+        handleRenameRequest(req, res)
         return
       }
 
